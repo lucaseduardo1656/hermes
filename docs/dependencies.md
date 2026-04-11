@@ -25,7 +25,11 @@ sudo pacman -S \
   file \
   which \
   diffutils \
-  patch
+  patch \
+  zlib \
+  gperf \
+  help2man \
+  ccache
 ```
 
 ### Ubuntu / Debian

@@ -1,15 +1,10 @@
 image boot.vfat {
 	vfat {
 		files = {
-			"bcm2712-rpi-5-b.dtb",
-			"bcm2712d0-rpi-5-b.dtb",
-			"start4.elf",
-			"fixup4.dat",
-			"Image",
-			"config.txt",
-			"cmdline.txt"
+#BOOT_FILES#
 		}
 	}
+
 	size = 64M
 }
 
@@ -18,15 +13,13 @@ image hermes-pi5.img {
 	}
 
 	partition boot {
-		partition-type = 0x0c
-		bootable = true
+		partition-type = 0xC
+		bootable = "true"
 		image = "boot.vfat"
-		size = 64M
 	}
 
 	partition rootfs {
 		partition-type = 0x83
 		image = "rootfs.ext4"
-		size = 2G
 	}
 }

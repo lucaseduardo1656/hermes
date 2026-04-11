@@ -1,0 +1,17 @@
+From: Hermes Project <hermes@local>
+Date: Fri, 11 Apr 2026 00:00:00 +0000
+Subject: [PATCH] glslang: add missing <cstdint> include for GCC 15 compat
+
+GCC 15 removed implicit inclusion of <cstdint> types. SpvBuilder.h uses
+uint32_t without including <cstdint>, causing build failures on GCC 15+.
+
+--- a/src/3rdparty/glslang/SPIRV/SpvBuilder.h
++++ b/src/3rdparty/glslang/SPIRV/SpvBuilder.h
+@@ -61,6 +61,7 @@
+ #include <set>
+ #include <sstream>
+ #include <stack>
++#include <cstdint>
+ #include <unordered_map>
+ #include <map>
+
