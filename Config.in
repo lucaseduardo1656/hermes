@@ -1,0 +1,2 @@
+config BR2_EXTERNAL_HERMES_PATH
+	string

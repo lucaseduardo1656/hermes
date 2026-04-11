@@ -1,0 +1,20 @@
+# Buildroot output (nunca commitar — gigabytes)
+buildroot/output/
+
+# Buildroot download cache
+buildroot/dl/
+
+# Editor
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts do app Qt
+app/build*/
+app/.qt/
+
+# Secrets — nunca commitar
+board/hermes-pi5/rootfs-overlay/etc/wpa_supplicant/wpa_supplicant-filled.conf
+*.key
+*.pem
+secrets.json
