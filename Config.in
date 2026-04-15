@@ -1,2 +1,4 @@
 config BR2_EXTERNAL_HERMES_PATH
 	string
+
+source "$BR2_EXTERNAL_HERMES_PATH/package/hermes-app/Config.in"

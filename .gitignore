@@ -13,6 +13,12 @@ buildroot/dl/
 app/build*/
 app/.qt/
 
+# Claude Code local config
+.claude/
+
+# Build log
+build.log
+
 # Secrets — nunca commitar
 board/hermes-pi5/rootfs-overlay/etc/wpa_supplicant/wpa_supplicant-filled.conf
 *.key

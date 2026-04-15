@@ -1,0 +1,5 @@
+# Converter pinctrl BCM2712 para módulo para evitar SError durante early boot.
+# Os registradores de GPIO pull do BCM2712 não são graváveis do ARM em
+# early boot (requerem inicialização do VPU firmware). Carregando como módulo,
+# o driver sobe depois da rootfs quando o hardware está pronto.
+CONFIG_PINCTRL_BCM2712=m

@@ -1,24 +1,20 @@
 [Unit]
 Description=Hermes Car System
-After=systemd-udevd.service sound.target bluetooth.target
+After=systemd-udevd.service
 Wants=bluetooth.service pipewire.service wireplumber.service
-# Aguardar rede apenas se wifi estiver configurado (não bloqueia boot offline)
 
 [Service]
-User=hermes
-Group=hermes
-PAMName=login
-TTYPath=/dev/tty1
-Environment=XDG_RUNTIME_DIR=/run/user/1000
-Environment=WAYLAND_DISPLAY=wayland-1
+Environment=XDG_RUNTIME_DIR=/run/hermes
+Environment=LANG=C.UTF-8
+Environment=LC_ALL=C.UTF-8
+Environment=WLR_BACKENDS=drm
+Environment=LIBSEAT_BACKEND=builtin
 Environment=QT_QPA_PLATFORM=wayland
 Environment=QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 Environment=QT_SCALE_FACTOR=1
-Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
-ExecStartPre=/bin/mkdir -p /run/user/1000
-ExecStartPre=/bin/chown hermes:hermes /run/user/1000
-# Cage inicia o Wayland compositor e lança o Hermes dentro dele
-ExecStart=/usr/bin/cage -s -- /usr/bin/hermes
+Environment=QT_QPA_FONTDIR=/usr/share/fonts/liberation
+ExecStartPre=/bin/mkdir -p /run/hermes
+ExecStart=/usr/bin/cage -- /usr/bin/hermes
 Restart=on-failure
 RestartSec=3
 
