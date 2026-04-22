@@ -31,6 +31,8 @@ ln -sf /lib/systemd/system/bluetooth.service \
     "${SYSTEMD_DIR}/multi-user.target.wants/bluetooth.service" 2>/dev/null || true
 
 # wpa_supplicant@wlan0 gerencia a interface diretamente (necessário para wpa_cli)
+# Remove o serviço genérico que o pacote buildroot instala automaticamente
+rm -f "${SYSTEMD_DIR}/multi-user.target.wants/wpa_supplicant.service" 2>/dev/null || true
 ln -sf wpa_supplicant.conf \
     "${TARGET_DIR}/etc/wpa_supplicant/wpa_supplicant-wlan0.conf" 2>/dev/null || true
 ln -sf /lib/systemd/system/wpa_supplicant@.service \
