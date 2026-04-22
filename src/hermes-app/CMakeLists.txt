@@ -4,12 +4,14 @@ project(hermes VERSION 0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Svg)
 
 qt_standard_project_setup(REQUIRES 6.5)
 
 qt_add_executable(hermes
     main.cpp
+    NetworkBackend.h
+    NetworkBackend.cpp
 )
 
 qt_add_qml_module(hermes
@@ -17,6 +19,21 @@ qt_add_qml_module(hermes
     VERSION 1.0
     QML_FILES
         qml/Main.qml
+        qml/TopBar.qml
+        qml/MapView.qml
+        qml/SettingsPanel.qml
+)
+
+qt_add_resources(hermes "hermes_icons"
+    PREFIX "/icons"
+    BASE "icons"
+    FILES
+        icons/wifi.svg
+        icons/bluetooth.svg
+        icons/volume-2.svg
+        icons/monitor.svg
+        icons/settings.svg
+        icons/sun.svg
 )
 
 target_link_libraries(hermes PRIVATE
@@ -24,6 +41,7 @@ target_link_libraries(hermes PRIVATE
     Qt6::Gui
     Qt6::Qml
     Qt6::Quick
+    Qt6::Svg
 )
 
 install(TARGETS hermes DESTINATION /usr/bin)
