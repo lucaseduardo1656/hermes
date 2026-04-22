@@ -12,6 +12,7 @@ buildroot/dl/
 # Build artifacts do app Qt
 app/build*/
 app/.qt/
+src/hermes-app/build/
 
 # Claude Code local config
 .claude/

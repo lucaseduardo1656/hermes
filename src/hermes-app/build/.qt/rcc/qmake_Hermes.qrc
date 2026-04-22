@@ -1,6 +1,0 @@
-<RCC>
-  <qresource prefix="/qt/qml/Hermes">
-    <file alias="qmldir">/home/mirage/Projects/hermes/src/hermes-app/build/Hermes/qmldir</file>
-  </qresource>
-</RCC>
-
