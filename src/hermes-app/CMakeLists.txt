@@ -34,6 +34,9 @@ qt_add_resources(hermes "hermes_icons"
         icons/monitor.svg
         icons/settings.svg
         icons/sun.svg
+        icons/close.svg
+        icons/lock.svg
+        icons/chevron-down.svg
 )
 
 target_link_libraries(hermes PRIVATE

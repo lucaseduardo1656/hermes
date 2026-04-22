@@ -148,7 +148,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent; radius: 8
                     color: closeBtn.pressed ? "#2D2D2D" : "transparent"
-                    Text { anchors.centerIn: parent; text: "✕"; color: "#757575"; font.pixelSize: 18 }
+                    Image { anchors.centerIn: parent; source: "qrc:/icons/close.svg"; width: 18; height: 18; opacity: 0.45 }
                 }
             }
         }
@@ -210,6 +210,7 @@ Item {
                 contentHeight: contentCol.implicitHeight + 48
                 clip: true
                 flickableDirection: Flickable.VerticalFlick
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
                 Column {
                     id: contentCol
@@ -327,9 +328,9 @@ Item {
                                         spacing: 10
 
                                         // Lock icon for secured networks
-                                        Text {
-                                            text: "🔒"
-                                            font.pixelSize: 12
+                                        Image {
+                                            source: "qrc:/icons/lock.svg"
+                                            width: 12; height: 12
                                             visible: net && net.secured
                                             anchors.verticalCenter: parent.verticalCenter
                                             opacity: 0.5
@@ -453,9 +454,9 @@ Item {
                             Text { text: "Volume"; color: "#D0D0D0"; font.pixelSize: 14 }
                             Item {
                                 width: parent.width; height: 28
-                                Text {
+                                Image {
                                     id: volIcon; anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                                    text: "♪"; color: "#606060"; font.pixelSize: 16
+                                    source: "qrc:/icons/volume-2.svg"; width: 16; height: 16; opacity: 0.4
                                 }
                                 Text {
                                     id: volPct
@@ -658,9 +659,9 @@ Item {
                                 text: root.displayLanguage === 0 ? "Português" : "English"
                                 color: "#D0D0D0"; font.pixelSize: 14
                             }
-                            Text {
+                            Image {
                                 anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                                text: "▾"; color: "#757575"; font.pixelSize: 13
+                                source: "qrc:/icons/chevron-down.svg"; width: 14; height: 14; opacity: 0.45
                             }
                             MouseArea { anchors.fill: parent; onClicked: langBtn.expanded = !langBtn.expanded }
                         }
@@ -732,13 +733,17 @@ Item {
         Item {
             anchors.fill: parent
             visible: root._showPassDialog
-            z: 20
+            z: 100
 
-            Rectangle { anchors.fill: parent; color: "#80000000" }
+            Rectangle {
+                anchors.fill: parent; color: "#80000000"
+                MouseArea { anchors.fill: parent }
+            }
 
             Rectangle {
                 width: 420; height: 180
-                anchors.centerIn: parent
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: 80
                 color: "#252525"; radius: 12
 
                 Column {

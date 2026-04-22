@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/mirage/Projects/hermes/src/hermes-app/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -1,0 +1,11 @@
+<RCC>
+  <qresource prefix="/icons">
+    <file alias="wifi.svg">/home/mirage/Projects/hermes/src/hermes-app/icons/wifi.svg</file>
+    <file alias="bluetooth.svg">/home/mirage/Projects/hermes/src/hermes-app/icons/bluetooth.svg</file>
+    <file alias="volume-2.svg">/home/mirage/Projects/hermes/src/hermes-app/icons/volume-2.svg</file>
+    <file alias="monitor.svg">/home/mirage/Projects/hermes/src/hermes-app/icons/monitor.svg</file>
+    <file alias="settings.svg">/home/mirage/Projects/hermes/src/hermes-app/icons/settings.svg</file>
+    <file alias="sun.svg">/home/mirage/Projects/hermes/src/hermes-app/icons/sun.svg</file>
+  </qresource>
+</RCC>
+

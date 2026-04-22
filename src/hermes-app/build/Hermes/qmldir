@@ -1,0 +1,9 @@
+module Hermes
+typeinfo hermes.qmltypes
+prefer :/qt/qml/Hermes/
+Main 1.0 qml/Main.qml
+TopBar 1.0 qml/TopBar.qml
+MapView 1.0 qml/MapView.qml
+SettingsPanel 1.0 qml/SettingsPanel.qml
+depends QtQuick
+

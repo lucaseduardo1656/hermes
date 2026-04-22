@@ -65,11 +65,11 @@ Item {
             radius: 8
             color: settingsTap.pressed ? "#4D4D4D" : "transparent"
 
-            Text {
+            Image {
                 anchors.centerIn: parent
-                text: "⚙"
-                color: "#757575"
-                font.pixelSize: 20
+                source: "qrc:/icons/settings.svg"
+                width: 20; height: 20
+                opacity: 0.45
             }
         }
 

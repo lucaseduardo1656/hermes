@@ -1,0 +1,9 @@
+<RCC>
+  <qresource prefix="/qt/qml/Hermes/">
+    <file alias="qml/Main.qml">/home/mirage/Projects/hermes/src/hermes-app/qml/Main.qml</file>
+    <file alias="qml/TopBar.qml">/home/mirage/Projects/hermes/src/hermes-app/qml/TopBar.qml</file>
+    <file alias="qml/MapView.qml">/home/mirage/Projects/hermes/src/hermes-app/qml/MapView.qml</file>
+    <file alias="qml/SettingsPanel.qml">/home/mirage/Projects/hermes/src/hermes-app/qml/SettingsPanel.qml</file>
+  </qresource>
+</RCC>
+
