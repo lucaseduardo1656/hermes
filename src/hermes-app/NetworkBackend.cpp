@@ -27,19 +27,19 @@ QString NetworkBackend::run(const QString &cmd, int timeoutMs) const
 
 void NetworkBackend::pollWifi()
 {
-    // Check interface state via sysfs
-    QFile opstate(QStringLiteral("/sys/class/net/") + m_iface + QStringLiteral("/operstate"));
-    if (!opstate.open(QIODevice::ReadOnly)) {
+    // Check IFF_UP flag — operstate="down" for WiFi just means not associated, not radio off
+    QFile flagsFile(QStringLiteral("/sys/class/net/") + m_iface + QStringLiteral("/flags"));
+    if (!flagsFile.open(QIODevice::ReadOnly)) {
         bool changed = m_wifiEnabled || m_wifiConnected;
         m_wifiEnabled = m_wifiConnected = false;
         m_wifiSsid.clear(); m_wifiIp.clear(); m_wifiSignal = 0;
         if (changed) emit wifiChanged();
         return;
     }
-    const QString state = QTextStream(&opstate).readAll().trimmed();
-    opstate.close();
+    const uint flagVal = QTextStream(&flagsFile).readAll().trimmed().toUInt(nullptr, 16);
+    flagsFile.close();
 
-    const bool enabled = (state != QLatin1String("down"));
+    const bool enabled = (flagVal & 0x1U) != 0; // IFF_UP
 
     QString ssid, ip;
     bool connected = false;
