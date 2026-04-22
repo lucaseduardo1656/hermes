@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 
 Item {
     id: root
@@ -52,18 +53,17 @@ Item {
         onTriggered: timeLabel.text = Qt.formatTime(new Date(), "HH:mm")
     }
 
-    MouseArea {
+    Item {
         id: settingsBtn
         anchors.right: parent.right
         anchors.rightMargin: 4
         anchors.verticalCenter: parent.verticalCenter
         width: 44; height: 44
-        onClicked: root.settingsRequested()
 
         Rectangle {
             anchors.fill: parent
             radius: 8
-            color: settingsBtn.pressed ? "#4D4D4D" : "transparent"
+            color: settingsTap.pressed ? "#4D4D4D" : "transparent"
 
             Text {
                 anchors.centerIn: parent
@@ -71,6 +71,11 @@ Item {
                 color: "#757575"
                 font.pixelSize: 20
             }
+        }
+
+        TapHandler {
+            id: settingsTap
+            onTapped: root.settingsRequested()
         }
     }
 }

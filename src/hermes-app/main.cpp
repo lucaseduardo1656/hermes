@@ -1,11 +1,13 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QCursor>
 #include "NetworkBackend.h"
 
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
+    app.setOverrideCursor(Qt::BlankCursor);
 
     NetworkBackend network;
 
