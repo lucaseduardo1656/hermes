@@ -270,8 +270,11 @@ async def resolve_track(request: Request):
 @router.post("/downloads")
 async def enqueue_download(request: Request):
     """Enqueue track for offline download. Idempotent."""
-    track = await request.json()
-    if not track.get("id"):
+    try:
+        track = await request.json()
+    except Exception:
+        raise HTTPException(400, "Body must be a JSON track object")
+    if not isinstance(track, dict) or not track.get("id"):
         raise HTTPException(400, "track.id required")
     item = await dl.enqueue(track)
     return {

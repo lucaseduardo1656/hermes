@@ -24,10 +24,10 @@ async def lifespan(app: FastAPI):
     from auth import token_store
     import downloader as dl
     connected = token_store.connected_providers()
-    log.info(
-        "Connected providers: %s" if connected else "No providers connected yet.",
-        ", ".join(connected) if connected else "",
-    )
+    if connected:
+        log.info("Connected providers: %s", ", ".join(connected))
+    else:
+        log.info("No providers connected yet.")
     # Start download worker as background task
     worker_task = asyncio.create_task(dl.run_worker())
     log.info("Download worker started")
