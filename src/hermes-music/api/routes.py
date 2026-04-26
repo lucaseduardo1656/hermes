@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from providers import spotify, ytmusic, soundcloud
 from resolver import resolve
 import downloader as dl
+import history as hist
 from config import settings
 
 router = APIRouter()
@@ -242,6 +243,143 @@ async def sc_user_tracks(url: str = Query(...)):
 async def sc_playlist(url: str = Query(...)):
     tracks = await soundcloud.get_playlist(url)
     return {"tracks": tracks}
+
+
+# ── Home page ────────────────────────────────────────────────────────────────
+
+@router.get("/home")
+async def home():
+    """
+    Unified home page for the Qt MusicView.
+    Returns sections: recents, playlists, recommendations, top tracks.
+    All providers merged — UI doesn't need to know the source.
+    Sections with no data are omitted so Qt renders only what's available.
+    """
+    import asyncio
+
+    # Fire all requests in parallel
+    tasks = {
+        "recents":         asyncio.create_task(_safe(lambda: hist.recent(10))),
+        "playlists":       asyncio.create_task(_safe(_all_playlists)),
+        "recommendations": asyncio.create_task(_safe(_all_recommendations)),
+        "top_tracks":      asyncio.create_task(_safe(_top_tracks)),
+        "liked":           asyncio.create_task(_safe(_all_liked)),
+    }
+
+    results = {k: await v for k, v in tasks.items()}
+
+    sections = []
+
+    if results["recents"]:
+        sections.append({"id": "recents", "title": "Tocadas recentemente",
+                         "type": "tracks", "items": results["recents"]})
+
+    if results["playlists"]:
+        sections.append({"id": "playlists", "title": "Suas playlists",
+                         "type": "playlists", "items": results["playlists"]})
+
+    if results["recommendations"]:
+        sections.append({"id": "recommendations", "title": "Recomendado pra você",
+                         "type": "tracks", "items": results["recommendations"]})
+
+    if results["top_tracks"]:
+        sections.append({"id": "top_tracks", "title": "Suas mais tocadas",
+                         "type": "tracks", "items": results["top_tracks"]})
+
+    if results["liked"]:
+        sections.append({"id": "liked", "title": "Músicas curtidas",
+                         "type": "tracks", "items": results["liked"]})
+
+    return {"sections": sections}
+
+
+async def _safe(fn):
+    """Run fn, return [] on any error (home page must never fail)."""
+    try:
+        result = fn()
+        if hasattr(result, "__await__") or hasattr(result, "cr_frame"):
+            return await result
+        return result
+    except Exception:
+        return []
+
+
+async def _all_playlists() -> list[dict]:
+    import asyncio
+    results = await asyncio.gather(
+        spotify.get_playlists()  if spotify.is_connected()  else _empty(),
+        ytmusic.get_playlists()  if ytmusic.is_connected()  else _empty(),
+        return_exceptions=True,
+    )
+    out = []
+    for r in results:
+        if isinstance(r, list):
+            out.extend(r)
+    return out
+
+
+async def _all_recommendations() -> list[dict]:
+    import asyncio
+    from itertools import zip_longest
+    results = await asyncio.gather(
+        spotify.get_recommendations() if spotify.is_connected() else _empty(),
+        ytmusic.get_recommendations() if ytmusic.is_connected() else _empty(),
+        return_exceptions=True,
+    )
+    sp = results[0] if isinstance(results[0], list) else []
+    yt = results[1] if isinstance(results[1], list) else []
+    mixed = []
+    for a, b in zip_longest(sp, yt):
+        if a: mixed.append(a)
+        if b: mixed.append(b)
+    return mixed[:30]
+
+
+async def _top_tracks() -> list[dict]:
+    if not spotify.is_connected():
+        return []
+    return await spotify.get_top_tracks(limit=20)
+
+
+async def _all_liked() -> list[dict]:
+    import asyncio
+    results = await asyncio.gather(
+        spotify.get_liked_tracks(20) if spotify.is_connected() else _empty(),
+        ytmusic.get_liked_songs(20)  if ytmusic.is_connected()  else _empty(),
+        return_exceptions=True,
+    )
+    out = []
+    for r in results:
+        if isinstance(r, list):
+            out.extend(r)
+    return out
+
+
+async def _empty() -> list:
+    return []
+
+
+# ── Play history (Qt calls this when a track starts) ─────────────────────────
+
+@router.post("/played")
+async def mark_played(request: Request):
+    """
+    Qt calls this when a track starts playing.
+    Persists to local history for 'Recently played' section.
+    """
+    try:
+        track = await request.json()
+    except Exception:
+        raise HTTPException(400, "Body must be a JSON track object")
+    if not isinstance(track, dict) or not track.get("id"):
+        raise HTTPException(400, "track.id required")
+    hist.record(track)
+    return {"ok": True}
+
+
+@router.get("/played")
+async def get_history(limit: int = Query(20)):
+    return {"tracks": hist.recent(limit)}
 
 
 # ── Stream URL resolution (the core of Spotube approach) ─────────────────────
