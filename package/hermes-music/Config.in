@@ -1,0 +1,7 @@
+config BR2_PACKAGE_HERMES_MUSIC
+	bool "hermes-music"
+	depends on BR2_PACKAGE_PYTHON3
+	help
+	  Music backend daemon for Hermes car multimedia.
+	  Aggregates Spotify, YouTube Music and SoundCloud.
+	  Serves stream URLs to the Qt frontend via HTTP.
