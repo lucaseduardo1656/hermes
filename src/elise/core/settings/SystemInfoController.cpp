@@ -53,7 +53,8 @@ void SystemInfoController::connect() {
                    }, Qt::QueuedConnection);
                });
 
-        m_proxy->finishRegistration();
+        // sdbus-c++ 2.x: no finishRegistration; signal subscriptions take
+        // effect once the connection's event loop starts.
         m_conn->enterEventLoopAsync();
 
         setOnline(true);

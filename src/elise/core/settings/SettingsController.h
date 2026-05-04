@@ -1,7 +1,7 @@
 #pragma once
 #include <QObject>
 
-class SystemInfoController;
+#include "SystemInfoController.h"
 
 // Root facade for system-wide settings. Owns and exposes one sub-controller
 // per concern (system, network, audio, …) so QML can bind via:
