@@ -1,7 +1,7 @@
 [Unit]
-Description=Hermes Car System
-After=systemd-udevd.service
-Wants=bluetooth.service pipewire.service wireplumber.service
+Description=Elise Car System
+After=systemd-udevd.service wpa_supplicant@wlan0.service pipewire.service wireplumber.service hermes-music.service
+Wants=bluetooth.service pipewire.service wireplumber.service wpa_supplicant@wlan0.service hermes-music.service
 
 [Service]
 Environment=XDG_RUNTIME_DIR=/run/hermes
@@ -10,11 +10,12 @@ Environment=LC_ALL=C.UTF-8
 Environment=WLR_BACKENDS=drm,libinput
 Environment=LIBSEAT_BACKEND=builtin
 Environment=QT_QPA_PLATFORM=wayland
+Environment=QT_IM_MODULE=qtvirtualkeyboard
 Environment=QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 Environment=QT_SCALE_FACTOR=1
 Environment=QT_QPA_FONTDIR=/usr/share/fonts/liberation
 ExecStartPre=/bin/mkdir -p /run/hermes
-ExecStart=/usr/bin/cage -- /usr/bin/hermes
+ExecStart=/usr/bin/cage -- /usr/bin/elise
 Restart=on-failure
 RestartSec=3
 

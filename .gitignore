@@ -13,6 +13,8 @@ buildroot/dl/
 app/build*/
 app/.qt/
 src/hermes-app/build/
+src/elise/build/
+/build/
 
 # Claude Code local config
 .claude/

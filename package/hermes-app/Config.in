@@ -1,6 +1,0 @@
-config BR2_PACKAGE_HERMES_APP
-	bool "hermes-app"
-	depends on BR2_PACKAGE_QT6
-	depends on BR2_PACKAGE_QT6DECLARATIVE
-	help
-	  Hermes car system application (Qt6/QML).
