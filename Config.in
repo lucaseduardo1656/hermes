@@ -3,3 +3,5 @@ config BR2_EXTERNAL_HERMES_PATH
 
 source "$BR2_EXTERNAL_HERMES_PATH/package/elise/Config.in"
 source "$BR2_EXTERNAL_HERMES_PATH/package/hermes-music/Config.in"
+source "$BR2_EXTERNAL_HERMES_PATH/package/hermes-ipc/Config.in"
+source "$BR2_EXTERNAL_HERMES_PATH/package/hermes-systemd/Config.in"

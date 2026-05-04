@@ -6,6 +6,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Svg Network Multimedia)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SDBUS_CPP REQUIRED IMPORTED_TARGET sdbus-c++)
+
+# HermesIpc is optional in dev (host build without buildroot may not have it).
+# When available, we use it to generate proxy stubs from canonical XML; when
+# not, the controllers fall back to string-based dispatch on raw IProxy.
+find_package(HermesIpc QUIET)
+
 qt_standard_project_setup(REQUIRES 6.5)
 
 qt_add_executable(elise
@@ -16,6 +24,10 @@ qt_add_executable(elise
     core/PlayerController.cpp
     core/NavigationController.h
     core/NavigationController.cpp
+    core/settings/SettingsController.h
+    core/settings/SettingsController.cpp
+    core/settings/SystemInfoController.h
+    core/settings/SystemInfoController.cpp
 )
 
 set_source_files_properties(ui/Theme.qml PROPERTIES
@@ -92,6 +104,19 @@ target_link_libraries(elise PRIVATE
     Qt6::Svg
     Qt6::Network
     Qt6::Multimedia
+    PkgConfig::SDBUS_CPP
 )
+
+# Generate the org.hermes.System1 client proxy from the canonical XML.
+# Only wired when hermes-ipc is available (Buildroot installs it; pure host
+# dev builds without the package skip codegen and rely on the runtime
+# string-based proxy in SystemInfoController).
+if (HermesIpc_FOUND)
+    hermes_ipc_generate(
+        TARGET    elise
+        INTERFACE org.hermes.System1
+        PROXY
+    )
+endif()
 
 install(TARGETS elise DESTINATION /usr/bin)

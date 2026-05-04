@@ -6,6 +6,7 @@
 #include "core/SystemController.h"
 #include "core/PlayerController.h"
 #include "core/NavigationController.h"
+#include "core/settings/SettingsController.h"
 
 int main(int argc, char *argv[])
 {
@@ -15,11 +16,13 @@ int main(int argc, char *argv[])
     SystemController    system;
     PlayerController    player;
     NavigationController nav;
+    SettingsController   settings;
 
     QQmlApplicationEngine engine;
-    engine.rootContext()->setContextProperty("System", &system);
-    engine.rootContext()->setContextProperty("Player", &player);
-    engine.rootContext()->setContextProperty("Nav",    &nav);
+    engine.rootContext()->setContextProperty("System",   &system);
+    engine.rootContext()->setContextProperty("Player",   &player);
+    engine.rootContext()->setContextProperty("Nav",      &nav);
+    engine.rootContext()->setContextProperty("Settings", &settings);
 
     engine.loadFromModule("Elise", "Main");
 
