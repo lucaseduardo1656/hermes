@@ -59,4 +59,46 @@ QtObject {
 
     // ── Gestures ──────────────────────────────────────────────────────────────
     readonly property int dragSnapVelocity:  600     // px/s to trigger fast snap
+
+    // ── Drag pill indicator (top of cards/menus) ──────────────────────────────
+    readonly property int dragPillW:    36
+    readonly property int dragPillH:    4
+    readonly property int dragPillR:    2
+
+    // ── Menu surface ──────────────────────────────────────────────────────────
+    readonly property int menuHeaderH:  64
+
+    // ── Hairlines ─────────────────────────────────────────────────────────────
+    readonly property int borderHairline: 1
+
+    // ── Progress bar ──────────────────────────────────────────────────────────
+    readonly property int progressBarH:    3
+    readonly property real progressBarR:   1.5
+    readonly property int progressRowH:    14    // hit-target height around the bar
+    readonly property int progressTickMs:  500   // width animation cadence
+
+    // ── Tabs / search field ───────────────────────────────────────────────────
+    readonly property int tabH:        32
+    readonly property int searchFieldW: 260
+
+    // ── Navigation overlay ────────────────────────────────────────────────────
+    readonly property int navOverlayH:  90    // total slot in window
+    readonly property int navCardH:     64    // visible card inside the slot
+    readonly property int navBadge:     40    // direction-icon badge size
+
+    // ── Toast notifications ───────────────────────────────────────────────────
+    readonly property int toastH:           48
+    readonly property int toastSpacing:     6
+    readonly property int toastSlideOffset: 60   // slide-in start y
+
+    // ── Settings menu ─────────────────────────────────────────────────────────
+    readonly property int settingsSidebarW:    220   // left navigation width
+    readonly property int settingsSidebarItem: 52    // sidebar row height
+    readonly property int settingsSummaryH:    56    // top summary bar height
+    readonly property int settingsRowH:        56    // standard list-row height
+    readonly property int statusDot:           8     // small status indicator
 }
+
+
+
+

@@ -19,7 +19,7 @@ Item {
             left:   parent.left; leftMargin:  Theme.spaceL
             right:  parent.right; rightMargin: Theme.spaceL
         }
-        height: 64
+        height: Theme.navCardH
         radius: Theme.radiusL
         color:  System.surface
 
@@ -39,7 +39,8 @@ Item {
             // Direction badge
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
-                width:  40; height: 40
+                width:  Theme.navBadge
+                height: Theme.navBadge
                 radius: Theme.radiusM
                 color:  Qt.rgba(System.accent.r, System.accent.g, System.accent.b, 0.15)
 

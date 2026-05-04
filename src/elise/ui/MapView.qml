@@ -1,4 +1,5 @@
 import QtQuick
+import Elise
 
 Item {
     id: root
@@ -41,7 +42,7 @@ Item {
         anchors.centerIn: parent
         text:  "MAP"
         color: "#FFFFFF"
-        font.pixelSize: 11
+        font.pixelSize: Theme.fontCaption
         font.letterSpacing: 6
         opacity: 0.06
     }

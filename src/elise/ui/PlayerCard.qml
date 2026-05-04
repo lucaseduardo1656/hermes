@@ -102,8 +102,10 @@ Item {
         Rectangle {
             anchors { top: parent.top; horizontalCenter: parent.horizontalCenter
                       topMargin: Theme.spaceS }
-            width: 36; height: 4; radius: 2
-            color: System.border
+            width:  Theme.dragPillW
+            height: Theme.dragPillH
+            radius: Theme.dragPillR
+            color:  System.border
             opacity: root.playerState !== "expanded" ? 1.0 : 0.0
             Behavior on opacity { NumberAnimation { duration: Theme.durFast } }
         }
@@ -272,16 +274,16 @@ Item {
 
                     IconBtn {
                         icon: "qrc:/icons/skip-back.svg"
-                        size: Theme.iconM
+                        size: Theme.iconS
                         onTapped: Player.previous()
                     }
 
-                    // Play / pause — gold accent square (sized to match transport buttons)
+                    // Play / pause — gold accent square (matches collapsed bar play button)
                     Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
-                        width:  Theme.btnMedium
-                        height: Theme.btnMedium
-                        radius: Theme.radiusM
+                        width:  Theme.btnSmall
+                        height: Theme.btnSmall
+                        radius: Theme.radiusS
                         color:  _expPlay.pressed ? System.accentDim : System.accent
                         Behavior on color { ColorAnimation { duration: Theme.durFast } }
 
@@ -289,24 +291,24 @@ Item {
                             anchors.centerIn: parent
                             source: Player.playing ? "qrc:/icons/pause.svg" : "qrc:/icons/play.svg"
                             color:  "#000000"
-                            size:   Theme.iconM
+                            size:   Theme.iconS
                         }
                         MouseArea { id: _expPlay; anchors.fill: parent; onClicked: Player.togglePlay() }
                     }
 
                     IconBtn {
                         icon: "qrc:/icons/skip-forward.svg"
-                        size: Theme.iconM
+                        size: Theme.iconS
                         onTapped: Player.next()
                     }
                     IconBtn {
                         icon: "qrc:/icons/heart.svg"
-                        size: Theme.iconM
+                        size: Theme.iconS
                         // TODO: wire to Player.toggleFavorite() once exposed
                     }
                     IconBtn {
                         icon: "qrc:/icons/chevron-down.svg"
-                        size: Theme.iconM
+                        size: Theme.iconS
                         // Step-down: expanded → half → collapsed
                         onTapped: root.stateChangeRequested(
                             root.playerState === "expanded" ? "half" : "collapsed")
@@ -346,7 +348,7 @@ Item {
                     // Progress bar with remaining-time label aligned to the right
                     Item {
                         width: parent.width
-                        height: 14
+                        height: Theme.progressRowH
 
                         Text {
                             id: _expRemaining
@@ -364,7 +366,8 @@ Item {
                                 right: _expRemaining.left; rightMargin: Theme.spaceM
                                 verticalCenter: parent.verticalCenter
                             }
-                            height: 3; radius: 1.5
+                            height: Theme.progressBarH
+                            radius: Theme.progressBarR
                             color:  System.surface2
 
                             Rectangle {
@@ -372,11 +375,13 @@ Item {
                                 height: parent.height
                                 radius: parent.radius
                                 color:  System.accent
-                                Behavior on width { NumberAnimation { duration: 500 } }
+                                Behavior on width { NumberAnimation { duration: Theme.progressTickMs } }
                             }
-                            // Larger hit area than visual bar (extend top/bottom by 14px)
+                            // Larger hit area than visual bar
                             MouseArea {
-                                anchors { fill: parent; topMargin: -14; bottomMargin: -14 }
+                                anchors { fill: parent
+                                          topMargin:    -Theme.progressRowH
+                                          bottomMargin: -Theme.progressRowH }
                                 onPressed:         (m) => Player.seekTo(Math.max(0, Math.min(1, m.x / width)))
                                 onPositionChanged: (m) => { if (pressed) Player.seekTo(Math.max(0, Math.min(1, m.x / width))) }
                             }
@@ -393,7 +398,7 @@ Item {
 
                 Rectangle {
                     id: _searchField
-                    width:  260
+                    width:  Theme.searchFieldW
                     height: Theme.btnMedium
                     radius: Theme.radiusM
                     color:  "transparent"
@@ -434,7 +439,7 @@ Item {
                             required property string modelData
                             readonly property bool isActive: _expandedView.activeTab === modelData
 
-                            width: _tabLbl.width; height: 32
+                            width: _tabLbl.width; height: Theme.tabH
 
                             Text {
                                 id: _tabLbl

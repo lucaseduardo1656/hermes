@@ -22,7 +22,7 @@ Item {
             top: parent.top; left: parent.left; right: parent.right
             topMargin: Theme.spaceS
         }
-        spacing: 6
+        spacing: Theme.toastSpacing
 
         Repeater {
             model: _model
@@ -36,7 +36,7 @@ Item {
 
                 width:  parent.width - Theme.space3XL
                 x:      Theme.spaceL
-                height: 48
+                height: Theme.toastH
                 radius: Theme.radiusM
 
                 color: notif.type === "error"   ? "#3A1515"
@@ -99,7 +99,7 @@ Item {
 
                 // Slide in from above
                 NumberAnimation on y {
-                    from: -60; to: 0
+                    from: -Theme.toastSlideOffset; to: 0
                     duration: Theme.durSlow
                     easing.type: Easing.OutCubic
                     running: true

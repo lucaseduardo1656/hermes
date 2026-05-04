@@ -11,11 +11,13 @@ import Elise
 // Z-order legend:
 //   0     MapView (always behind)
 //   50    GlobalInputBlocker (blocks map taps when player is open)
+//   600   Floating action button (settings cog) — hidden behind expanded player
 //   700   Player card (collapsed / half)
 //   800   Navigation overlay (top toast for turn-by-turn)
 //   900   Player card (expanded — promoted above nav)
 //   1000  Notifications
 //   1100  Virtual keyboard
+//   1200  Settings menu (full-screen, drag-to-dismiss)
 Window {
     id: root
     width: 1024; height: 600
@@ -42,6 +44,20 @@ Window {
         onDismissed: root.playerState = "collapsed"
     }
 
+    // ── Floating action button (settings) ────────────────────────────────────
+    // Anchored to the top of the player card so it rises with the bar. Sits
+    // below the player in z so the expanded player covers it.
+    Fab {
+        anchors {
+            right:  parent.right; rightMargin: Theme.spaceL
+            bottom: _player.top;  bottomMargin: Theme.spaceL
+        }
+        z: 600
+        icon: "qrc:/icons/settings.svg"
+        visible: root.playerState !== "expanded"
+        onClicked: _settings.open = true
+    }
+
     // ── Player card ──────────────────────────────────────────────────────────
     PlayerCard {
         id: _player
@@ -62,7 +78,7 @@ Window {
     // ── Navigation overlay ───────────────────────────────────────────────────
     NavigationOverlay {
         anchors { top: parent.top; left: parent.left; right: parent.right }
-        height: 90
+        height: Theme.navOverlayH
         z: 800
     }
 
@@ -71,6 +87,12 @@ Window {
         id: notifications
         anchors { top: parent.top; left: parent.left; right: parent.right }
         z: 1000
+    }
+
+    // ── Settings menu ────────────────────────────────────────────────────────
+    SettingsMenu {
+        id: _settings
+        z: 1200
     }
 
     // ── Virtual keyboard ─────────────────────────────────────────────────────

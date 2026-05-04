@@ -34,6 +34,22 @@ qt_add_qml_module(elise
         ui/GlobalInputBlocker.qml
         ui/SvgIcon.qml
         ui/Theme.qml
+        ui/Fab.qml
+        ui/Menu.qml
+        ui/SettingsMenu.qml
+        ui/SettingsSidebarItem.qml
+        ui/SettingsSidebarHeader.qml
+        ui/SettingsCard.qml
+        ui/SettingsRow.qml
+        ui/SettingsAction.qml
+        ui/SettingsToggle.qml
+        ui/SettingsPagePerfil.qml
+        ui/SettingsPageContas.qml
+        ui/SettingsPageVeiculo.qml
+        ui/SettingsPageConectividade.qml
+        ui/SettingsPageInterface.qml
+        ui/SettingsPageSom.qml
+        ui/SettingsPageSistema.qml
 )
 
 qt_add_resources(elise "elise_icons"
@@ -57,6 +73,15 @@ qt_add_resources(elise "elise_icons"
         icons/music-note.svg
         icons/heart.svg
         icons/download.svg
+        icons/settings.svg
+        icons/user.svg
+        icons/accounts.svg
+        icons/car.svg
+        icons/wifi.svg
+        icons/monitor.svg
+        icons/volume.svg
+        icons/info.svg
+        icons/chevron-right.svg
 )
 
 target_link_libraries(elise PRIVATE
