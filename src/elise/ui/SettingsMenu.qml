@@ -49,9 +49,9 @@ Menu {
                 top: parent.top; topMargin: Theme.spaceXXL
                 left: parent.left; right: parent.right
             }
-            // TODO: bind to real backends (Perfil + network)
+            // TODO: bind userName to ProfileController when ready
             userName:   "Convidado"
-            connOnline: false
+            connOnline: Settings.network.online
             onProfileMenuRequested: {
                 // TODO: open profile picker
             }

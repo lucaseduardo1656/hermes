@@ -5,16 +5,44 @@ import Elise
 // trailing slot on the right. Concrete rows (toggle, action, value display)
 // build on top of this.
 //
+// Set `interactive: true` to enable a row-level MouseArea that emits
+// `clicked()` when the user taps anywhere on the row. Keep it `false` for
+// rows whose interactivity lives in their own widget (e.g. the toggle
+// track) so taps don't double-fire.
+//
 // Hairline divider draws automatically when this row is not the first child.
 Item {
     id: root
 
     property string label
-    property string sublabel: ""
+    property string sublabel:    ""
+    property bool   interactive: false
+    signal clicked()
+
     default property alias trailing: _trailing.data
 
     width:  parent ? parent.width : 0
     height: Theme.settingsRowH
+
+    // Row-level tap surface. Sits at the bottom of the stack so trailing
+    // widgets (e.g. a toggle track) get first dibs while the rest of the
+    // row falls through to here.
+    MouseArea {
+        id: _tap
+        anchors.fill: parent
+        enabled: root.interactive
+        onClicked: root.clicked()
+        z: 0
+    }
+
+    // Pressed-state tint (only when interactive).
+    Rectangle {
+        anchors.fill: parent
+        color:   _tap.pressed ? System.pressOverlay : "transparent"
+        visible: root.interactive
+        Behavior on color { ColorAnimation { duration: Theme.durFast } }
+        z: 1
+    }
 
     // Hairline divider (top edge); hidden if this row is the first sibling
     Rectangle {
@@ -23,6 +51,7 @@ Item {
         height: Theme.borderHairline
         color:  System.border
         visible: root.parent && root.parent.children[0] !== root
+        z: 2
     }
 
     Column {
@@ -32,6 +61,7 @@ Item {
             right: _trailing.left; rightMargin: Theme.spaceM
         }
         spacing: 2
+        z: 3
 
         Text {
             text:  root.label
@@ -56,5 +86,6 @@ Item {
         }
         width:  childrenRect.width
         height: parent.height
+        z: 4
     }
 }

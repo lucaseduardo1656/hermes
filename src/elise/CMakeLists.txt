@@ -28,6 +28,8 @@ qt_add_executable(elise
     core/settings/SettingsController.cpp
     core/settings/SystemInfoController.h
     core/settings/SystemInfoController.cpp
+    core/settings/NetworkController.h
+    core/settings/NetworkController.cpp
 )
 
 set_source_files_properties(ui/Theme.qml PROPERTIES
