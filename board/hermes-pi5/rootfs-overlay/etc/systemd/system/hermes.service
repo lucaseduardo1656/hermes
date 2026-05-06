@@ -1,7 +1,7 @@
 [Unit]
 Description=Elise Car System
-After=systemd-udevd.service wpa_supplicant@wlan0.service pipewire.service wireplumber.service hermes-music.service
-Wants=bluetooth.service pipewire.service wireplumber.service wpa_supplicant@wlan0.service hermes-music.service
+After=systemd-udevd.service wpa_supplicant.service pipewire.service wireplumber.service hermes-music.service
+Wants=bluetooth.service pipewire.service wireplumber.service wpa_supplicant.service hermes-music.service
 
 [Service]
 Environment=XDG_RUNTIME_DIR=/run/hermes

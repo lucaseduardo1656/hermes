@@ -2,40 +2,25 @@ import QtQuick
 import QtQuick.Controls
 import Elise
 
-// Page: Conectividade — Wi-Fi, Bluetooth, Hotspot (TODO).
+// Page: Conectividade — Wi-Fi, Bluetooth (TODO), Hotspot (TODO).
 //
-// Bound to `Settings.network` (NetworkController over net.connman).
-// Tapping a secured network opens an inline password prompt; the typed
-// passphrase is handed to the registered ConnMan Agent on connect.
+// Bound to `Settings.network` (NetworkController over wpa_supplicant1).
+// Tapping a secured network opens an inline password modal; the typed
+// passphrase is fed straight to wpa_supplicant via AddNetwork.
 Item {
     id: root
     clip: true
 
-    function _stateText(s) {
-        switch (s) {
-            case "online":        return "Conectado"
-            case "ready":         return "Conectado (sem internet)"
-            case "association":   return "Conectando…"
-            case "configuration": return "Obtendo IP…"
-            case "disconnect":    return "Desconectando…"
-            case "failure":       return "Falha"
-            case "idle":          return ""
-            default:              return s
-        }
-    }
-
     function _onNetworkTap(n) {
-        if (n.state === "ready" || n.state === "online") {
-            Settings.network.disconnectService(n.path)
+        if (n.ssid === Settings.network.currentSsid) {
+            Settings.network.disconnectCurrent()
             return
         }
-        // Favorited services already have stored credentials — straight Connect
-        // works. Otherwise we prompt for a passphrase if the network needs one.
-        if (n.favorite || n.security === "none") {
-            Settings.network.connectService(n.path)
+        if (n.security === "none" || n.saved) {
+            Settings.network.connectOpen(n.ssid)
             return
         }
-        _prompt.show(n.path, n.name)
+        _prompt.show(n.ssid)
     }
 
     Flickable {
@@ -57,10 +42,11 @@ Item {
             SettingsCard {
                 title: "Wi-Fi"
 
-                SettingsToggle {
-                    label: "Wi-Fi"
-                    checked: Settings.network.wifiPowered
-                    onToggled: (v) => Settings.network.setWifiPowered(v)
+                SettingsAction {
+                    label: Settings.network.currentSsid !== ""
+                              ? "Conectado: " + Settings.network.currentSsid
+                              : "Desconectado"
+                    sublabel: Settings.network.state
                 }
                 SettingsAction {
                     label: "Procurar redes"
@@ -71,38 +57,29 @@ Item {
                 Repeater {
                     model: Settings.network.networks
                     SettingsAction {
-                        label:    modelData.name
+                        label:    modelData.ssid
                         sublabel: {
-                            const st = root._stateText(modelData.state)
                             const sec = modelData.security !== "none" ? "🔒 " : ""
                             const sig = modelData.strength + "%"
-                            return sec + sig + (st ? " · " + st : "")
+                            const cur = modelData.ssid === Settings.network.currentSsid ? " · conectado" : ""
+                            const sav = modelData.saved && cur === "" ? " · salva" : ""
+                            return sec + sig + cur + sav
                         }
                         onTriggered: root._onNetworkTap(modelData)
                     }
                 }
             }
 
-            // ── Bluetooth ────────────────────────────────────────────────
+            // ── Bluetooth (TODO BlueZ) ───────────────────────────────────
             SettingsCard {
                 title: "Bluetooth"
-
-                SettingsToggle {
-                    label: "Bluetooth"
-                    checked: Settings.network.bluetoothPowered
-                    onToggled: (v) => Settings.network.setBluetoothPowered(v)
-                }
-                SettingsAction { label: "Dispositivos pareados";  sublabel: "Nenhum" }
-                SettingsAction { label: "Parear novo dispositivo" }
+                SettingsAction { label: "Em breve" }
             }
 
             // ── Hotspot (TODO) ───────────────────────────────────────────
             SettingsCard {
                 title: "Hotspot"
-
-                SettingsToggle { label: "Compartilhar conexão"; checked: false }
-                SettingsAction { label: "Nome da rede";        sublabel: "elise-hotspot" }
-                SettingsAction { label: "Senha" }
+                SettingsAction { label: "Em breve" }
             }
         }
     }
@@ -115,11 +92,9 @@ Item {
         visible: false
         z: 10
 
-        property string servicePath: ""
         property string ssid: ""
 
-        function show(path, name) {
-            servicePath = path
+        function show(name) {
             ssid        = name
             _input.text = ""
             visible     = true
@@ -127,7 +102,7 @@ Item {
         }
         function hide() { visible = false }
 
-        // Eat taps on the dim layer
+        // Eat taps on the dim layer.
         MouseArea { anchors.fill: parent; onClicked: {} }
 
         Rectangle {
@@ -157,7 +132,7 @@ Item {
                     width: parent.width
                 }
                 Text {
-                    text:  "Digite a senha da rede"
+                    text:  "Digite a senha"
                     color: System.textMuted
                     font.pixelSize: Theme.fontSmall
                 }
@@ -182,7 +157,7 @@ Item {
                         font.pixelSize: Theme.fontLabel
                         echoMode: TextInput.Password
                         clip: true
-                        onAccepted: _connect.clicked()
+                        onAccepted: _connect.activate()
                     }
                 }
 
@@ -211,7 +186,12 @@ Item {
                         id: _connect
                         width: 110; height: Theme.btnMedium; radius: Theme.radiusM
                         color: _connectArea.pressed ? System.accentDim : System.accent
-                        signal clicked()
+
+                        function activate() {
+                            Settings.network.connectWithPassphrase(_prompt.ssid, _input.text)
+                            _prompt.hide()
+                        }
+
                         Text {
                             anchors.centerIn: parent
                             text: "Conectar"
@@ -221,11 +201,7 @@ Item {
                         }
                         MouseArea { id: _connectArea
                             anchors.fill: parent
-                            onClicked: _connect.clicked()
-                        }
-                        onClicked: {
-                            Settings.network.connectWithPassphrase(_prompt.servicePath, _input.text)
-                            _prompt.hide()
+                            onClicked: _connect.activate()
                         }
                     }
                 }

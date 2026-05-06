@@ -1,67 +1,62 @@
 #pragma once
 #include <QObject>
 #include <QHash>
+#include <QSet>
 #include <QString>
 #include <QVariantList>
 #include <QTimer>
 #include <memory>
 
-namespace sdbus { class IConnection; class IProxy; class IObject; }
+namespace sdbus { class IConnection; class IProxy; }
 
-// Client wrapper around net.connman.Manager (system bus, "/").
+// Client wrapper around fi.w1.wpa_supplicant1 (system bus).
 //
-// ConnMan is the GENIVI/automotive-flavoured connectivity daemon. It owns
-// wpa_supplicant under the hood, manages DHCP and IP config, exposes a
-// uniform model for Wi-Fi, Ethernet, Bluetooth tethering and (via oFono)
-// cellular. We expose a small slice tailored to the Conectividade page:
+// We talk to wpa_supplicant directly — no ConnMan in the loop. wpa_supplicant
+// associates and authenticates; dhcpcd grabs the IP once the link comes up.
 //
-//   * `online`            — Manager.State == "online"
-//   * `wifiPowered`       — Technology(wifi).Powered
-//   * `wifiConnected`     — Technology(wifi).Connected
-//   * `bluetoothPowered`  — Technology(bluetooth).Powered
-//   * `networks`          — list of dicts (path, name, signal, state,
-//                           security, favorite) sourced from Services
-//                           filtered to type=="wifi"
+// Surface exposed to QML:
+//   * `online`           — wpa_supplicant Interface.State == "completed"
+//   * `state`            — Interface.State (raw string)
+//   * `wifiPowered`      — interface link up
+//   * `currentSsid`      — SSID of the active network, if any
+//   * `networks`         — list of dicts {bssid, ssid, signal, security,
+//                          frequency, saved} from BSSs + Networks
+//   * `bluetoothPowered` — placeholder false (BlueZ wiring later)
 //
-// Mutators are async best-effort: failures land in `errorOccurred`.
-//
-// Signal subscriptions:
-//   * Manager.PropertyChanged       → update online/state
-//   * Manager.ServicesChanged       → rebuild networks list
-//   * Manager.TechnologyAdded/Rem   → rebuild technology cache
+// Mutators:
+//   * scanWifi()                                 — Interface.Scan
+//   * connectWithPassphrase(ssid, psk)           — AddNetwork + SelectNetwork
+//   * connectOpen(ssid)                          — AddNetwork (key_mgmt=NONE)
+//   * disconnectCurrent()                        — Interface.Disconnect
+//   * forgetSsid(ssid)                           — RemoveNetwork
 class NetworkController : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(bool         online           READ online           NOTIFY changed)
     Q_PROPERTY(QString      state            READ state            NOTIFY changed)
     Q_PROPERTY(bool         wifiPowered      READ wifiPowered      NOTIFY changed)
-    Q_PROPERTY(bool         wifiConnected    READ wifiConnected    NOTIFY changed)
-    Q_PROPERTY(bool         bluetoothPowered READ bluetoothPowered NOTIFY changed)
+    Q_PROPERTY(QString      currentSsid      READ currentSsid      NOTIFY changed)
     Q_PROPERTY(QVariantList networks         READ networks         NOTIFY networksChanged)
+    Q_PROPERTY(bool         bluetoothPowered READ bluetoothPowered NOTIFY changed)
 
 public:
     explicit NetworkController(QObject *parent = nullptr);
     ~NetworkController() override;
 
-    bool         online()           const { return m_state == QLatin1String("online")
-                                                || m_state == QLatin1String("ready"); }
+    bool         online()           const { return m_state == QLatin1String("completed"); }
     QString      state()            const { return m_state; }
     bool         wifiPowered()      const { return m_wifiPowered; }
-    bool         wifiConnected()    const { return m_wifiConnected; }
-    bool         bluetoothPowered() const { return m_btPowered; }
+    QString      currentSsid()      const { return m_currentSsid; }
     QVariantList networks()         const { return m_networks; }
+    bool         bluetoothPowered() const { return false; }
 
     Q_INVOKABLE void setWifiPowered(bool on);
-    Q_INVOKABLE void setBluetoothPowered(bool on);
+    Q_INVOKABLE void setBluetoothPowered(bool /*on*/) {}
     Q_INVOKABLE void scanWifi();
-    Q_INVOKABLE void connectService(const QString &path);
-    // Stash a passphrase for the given service path, then call Connect on
-    // it. The registered net.connman.Agent will reply to RequestInput
-    // with the cached value when ConnMan asks. Cleared after the agent
-    // hands it over (single-use).
-    Q_INVOKABLE void connectWithPassphrase(const QString &path, const QString &passphrase);
-    Q_INVOKABLE void disconnectService(const QString &path);
-    Q_INVOKABLE void forgetService(const QString &path);
+    Q_INVOKABLE void connectOpen(const QString &ssid);
+    Q_INVOKABLE void connectWithPassphrase(const QString &ssid, const QString &psk);
+    Q_INVOKABLE void disconnectCurrent();
+    Q_INVOKABLE void forgetSsid(const QString &ssid);
 
 signals:
     void changed();
@@ -70,25 +65,19 @@ signals:
 
 private:
     void connect();
-    void refreshAll();
-    void refreshManagerProps();
-    void refreshTechnologies();
-    void refreshServices();
-    void setTechnologyPowered(const char *type, bool on);
-
-    void registerAgent();
+    void rebuildNetworks();
+    void refreshState();
+    QString findSavedNetworkPath(const QString &ssid) const;
+    QString addNetwork(const QString &ssid, const QString &psk);   // returns network path
+    void selectNetworkPath(const QString &path);
 
     std::unique_ptr<sdbus::IConnection> m_conn;
-    std::unique_ptr<sdbus::IProxy>      m_managerProxy;
-    std::unique_ptr<sdbus::IObject>     m_agent;
-    QHash<QString, QString>             m_pendingCredentials;   // path -> psk
+    std::unique_ptr<sdbus::IProxy>      m_iface;        // wpa_supplicant1.Interface
 
     QTimer  m_retryTimer;
-    QString m_state;
-    bool    m_wifiPowered    = false;
-    bool    m_wifiConnected  = false;
-    bool    m_btPowered      = false;
-    QString m_wifiTechPath;
-    QString m_btTechPath;
+    QString m_ifacePath;
+    QString m_state;             // "disconnected", "scanning", "associating", "completed"...
+    QString m_currentSsid;
+    bool    m_wifiPowered = false;
     QVariantList m_networks;
 };

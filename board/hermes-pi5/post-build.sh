@@ -39,6 +39,14 @@ ln -sf /etc/systemd/system/hermes.service \
 ln -sf /lib/systemd/system/dropbear.service \
     "${SYSTEMD_DIR}/multi-user.target.wants/dropbear.service" 2>/dev/null || true
 
+# wpa_supplicant on the system bus (-u). NetworkController in elise drives
+# it directly via fi.w1.wpa_supplicant1. dhcpcd takes care of IP once the
+# link comes up.
+ln -sf /lib/systemd/system/wpa_supplicant.service \
+    "${SYSTEMD_DIR}/multi-user.target.wants/wpa_supplicant.service" 2>/dev/null || true
+ln -sf /lib/systemd/system/dhcpcd.service \
+    "${SYSTEMD_DIR}/multi-user.target.wants/dhcpcd.service" 2>/dev/null || true
+
 # WiFi firmware — driver brcmfmac procura em brcm/, binário está em cypress/
 # Cria symlinks para RPi5 (CYW43455)
 BRCM_FW="${TARGET_DIR}/lib/firmware/brcm"

@@ -7,23 +7,29 @@
 #include <QVariantMap>
 
 namespace {
-constexpr const char *kService    = "net.connman";
-constexpr const char *kManagerIf  = "net.connman.Manager";
-constexpr const char *kTechIf     = "net.connman.Technology";
-constexpr const char *kServiceIf  = "net.connman.Service";
-constexpr const char *kRoot       = "/";
+constexpr const char *kService    = "fi.w1.wpa_supplicant1";
+constexpr const char *kRoot       = "/fi/w1/wpa_supplicant1";
+constexpr const char *kRootIf     = "fi.w1.wpa_supplicant1";
+constexpr const char *kIfaceIf    = "fi.w1.wpa_supplicant1.Interface";
+constexpr const char *kBssIf      = "fi.w1.wpa_supplicant1.BSS";
+constexpr const char *kNetworkIf  = "fi.w1.wpa_supplicant1.Network";
+constexpr const char *kPropsIf    = "org.freedesktop.DBus.Properties";
 
-// ConnMan returns sd-bus dict<string,variant> as
-// `std::map<std::string, sdbus::Variant>` in sdbus-c++ 2.x. Helpers below
-// strip the boilerplate of pulling typed values out.
+QString ssidFromBytes(const std::vector<uint8_t> &bytes) {
+    return QString::fromUtf8(reinterpret_cast<const char*>(bytes.data()),
+                             static_cast<int>(bytes.size()));
+}
+
+// `Variant.get<T>()` throws on type mismatch; these helpers just swallow it
+// and fall back to a default to keep refresh paths from blowing up when
+// wpa_supplicant returns an unexpected type.
 QString variantStr(const sdbus::Variant &v) {
     try { return QString::fromStdString(v.get<std::string>()); } catch (...) { return {}; }
 }
-bool variantBool(const sdbus::Variant &v) {
-    try { return v.get<bool>(); } catch (...) { return false; }
-}
-quint8 variantU8(const sdbus::Variant &v) {
-    try { return v.get<uint8_t>(); } catch (...) { return 0; }
+int variantInt(const sdbus::Variant &v) {
+    try { return v.get<int32_t>(); } catch (...) {
+        try { return int(v.get<uint16_t>()); } catch (...) { return 0; }
+    }
 }
 }
 
@@ -46,54 +52,59 @@ NetworkController::~NetworkController() {
 void NetworkController::connect() {
     try {
         m_conn = sdbus::createSystemBusConnection();
-        m_managerProxy = sdbus::createProxy(*m_conn,
+
+        // Resolve (or create) the wlan0 interface object.
+        auto root = sdbus::createProxy(*m_conn,
             sdbus::ServiceName{kService},
             sdbus::ObjectPath{kRoot});
 
-        m_managerProxy->uponSignal("PropertyChanged")
-            .onInterface(kManagerIf)
-            .call([this](const std::string &name, const sdbus::Variant &value) {
-                if (name != "State") return;
-                QString s = QString::fromStdString(value.get<std::string>());
-                QMetaObject::invokeMethod(this, [this, s]{
-                    if (m_state == s) return;
-                    m_state = s;
-                    emit changed();
-                }, Qt::QueuedConnection);
-            });
+        sdbus::ObjectPath ifacePath;
+        try {
+            root->callMethod("GetInterface").onInterface(kRootIf)
+                .withArguments(std::string{"wlan0"})
+                .storeResultsTo(ifacePath);
+        } catch (const sdbus::Error &) {
+            // Not yet registered — create.
+            std::map<std::string, sdbus::Variant> args;
+            args["Ifname"] = sdbus::Variant{std::string{"wlan0"}};
+            root->callMethod("CreateInterface").onInterface(kRootIf)
+                .withArguments(args).storeResultsTo(ifacePath);
+        }
+        m_ifacePath = QString::fromStdString(ifacePath);
 
-        m_managerProxy->uponSignal("ServicesChanged")
-            .onInterface(kManagerIf)
-            .call([this](const std::vector<sdbus::Struct<sdbus::ObjectPath,
-                                            std::map<std::string, sdbus::Variant>>> &/*changed*/,
-                         const std::vector<sdbus::ObjectPath> &/*removed*/) {
+        m_iface = sdbus::createProxy(*m_conn,
+            sdbus::ServiceName{kService},
+            sdbus::ObjectPath{ifacePath});
+
+        // Watch State / CurrentBSS / BSSs / Networks via PropertiesChanged.
+        m_iface->uponSignal("PropertiesChanged")
+            .onInterface(kIfaceIf)
+            .call([this](const std::map<std::string, sdbus::Variant> &/*changed*/) {
                 QMetaObject::invokeMethod(this, [this]{
-                    refreshServices();
+                    refreshState();
+                    rebuildNetworks();
                 }, Qt::QueuedConnection);
             });
 
-        m_managerProxy->uponSignal("TechnologyAdded")
-            .onInterface(kManagerIf)
+        m_iface->uponSignal("BSSAdded").onInterface(kIfaceIf)
             .call([this](const sdbus::ObjectPath &/*p*/,
                          const std::map<std::string, sdbus::Variant> &/*props*/) {
-                QMetaObject::invokeMethod(this, [this]{
-                    refreshTechnologies();
-                }, Qt::QueuedConnection);
+                QMetaObject::invokeMethod(this, [this]{ rebuildNetworks(); }, Qt::QueuedConnection);
             });
-
-        m_managerProxy->uponSignal("TechnologyRemoved")
-            .onInterface(kManagerIf)
+        m_iface->uponSignal("BSSRemoved").onInterface(kIfaceIf)
             .call([this](const sdbus::ObjectPath &/*p*/) {
-                QMetaObject::invokeMethod(this, [this]{
-                    refreshTechnologies();
-                }, Qt::QueuedConnection);
+                QMetaObject::invokeMethod(this, [this]{ rebuildNetworks(); }, Qt::QueuedConnection);
             });
-
-        registerAgent();
+        m_iface->uponSignal("ScanDone").onInterface(kIfaceIf)
+            .call([this](bool /*success*/) {
+                QMetaObject::invokeMethod(this, [this]{ rebuildNetworks(); }, Qt::QueuedConnection);
+            });
 
         m_conn->enterEventLoopAsync();
 
-        refreshAll();
+        refreshState();
+        rebuildNetworks();
+        scanWifi();   // kick a first scan
     } catch (const sdbus::Error &e) {
         qWarning() << "NetworkController: connect failed:"
                    << e.getName().c_str() << "—" << e.getMessage().c_str();
@@ -101,237 +112,254 @@ void NetworkController::connect() {
     }
 }
 
-// ConnMan calls into us at /elise/Agent for credentials when a service
-// needs them. Spec: connman/doc/agent-api.txt. We answer RequestInput by
-// looking up the cached PSK that the UI stashed via connectWithPassphrase.
-// Released after a single use to avoid leaking the secret in memory.
-void NetworkController::registerAgent() {
-    if (!m_conn) return;
-
-    m_agent = sdbus::createObject(*m_conn,
-        sdbus::ObjectPath{"/elise/Agent"});
-
-    using FieldsIn  = std::map<std::string, sdbus::Variant>;
-    using FieldsOut = std::map<std::string, sdbus::Variant>;
-
-    m_agent->addVTable(
-        sdbus::registerMethod("Release").implementedAs([](){ /* nothing */ }),
-
-        sdbus::registerMethod("ReportError")
-            .withInputParamNames("service", "error")
-            .implementedAs([this](sdbus::ObjectPath svc, std::string err) {
-                QString p = QString::fromStdString(svc);
-                QString e = QString::fromStdString(err);
-                QMetaObject::invokeMethod(this, [this, p, e]{
-                    m_pendingCredentials.remove(p);
-                    emit errorOccurred(p + QStringLiteral(": ") + e);
-                }, Qt::QueuedConnection);
-            }),
-
-        sdbus::registerMethod("RequestInput")
-            .withInputParamNames("service", "fields")
-            .withOutputParamNames("result")
-            .implementedAs([this](sdbus::ObjectPath svc, FieldsIn /*fields*/) -> FieldsOut {
-                FieldsOut out;
-                QString p = QString::fromStdString(svc);
-                const QString psk = m_pendingCredentials.value(p);
-                if (!psk.isEmpty()) {
-                    out["Passphrase"] = sdbus::Variant{psk.toStdString()};
-                    m_pendingCredentials.remove(p);
-                }
-                return out;
-            }),
-
-        sdbus::registerMethod("Cancel").implementedAs([](){ /* nothing */ })
-    ).forInterface("net.connman.Agent");
-
+void NetworkController::refreshState() {
+    if (!m_iface) return;
     try {
-        m_managerProxy->callMethod("RegisterAgent")
-            .onInterface(kManagerIf)
-            .withArguments(sdbus::ObjectPath{"/elise/Agent"});
-    } catch (const sdbus::Error &e) {
-        // Already registered (e.g. after a reconnect): tolerate it.
-        qWarning() << "NetworkController: RegisterAgent:" << e.getMessage().c_str();
-    }
-}
+        auto state = m_iface->getProperty("State")
+                            .onInterface(kIfaceIf).get<std::string>();
+        QString s = QString::fromStdString(state);
+        const bool prevPowered = m_wifiPowered;
+        m_wifiPowered = (s != QLatin1String("interface_disabled"));
 
-void NetworkController::refreshAll() {
-    refreshManagerProps();
-    refreshTechnologies();
-    refreshServices();
-}
-
-void NetworkController::refreshManagerProps() {
-    if (!m_managerProxy) return;
-    try {
-        std::map<std::string, sdbus::Variant> props;
-        m_managerProxy->callMethod("GetProperties")
-            .onInterface(kManagerIf).storeResultsTo(props);
-        if (auto it = props.find("State"); it != props.end()) {
-            QString s = variantStr(it->second);
-            if (s != m_state) { m_state = s; emit changed(); }
-        }
-    } catch (const sdbus::Error &e) {
-        qWarning() << "NetworkController: GetProperties failed:" << e.getMessage().c_str();
-    }
-}
-
-void NetworkController::refreshTechnologies() {
-    if (!m_managerProxy) return;
-    try {
-        using TechEntry = sdbus::Struct<sdbus::ObjectPath,
-                                        std::map<std::string, sdbus::Variant>>;
-        std::vector<TechEntry> techs;
-        m_managerProxy->callMethod("GetTechnologies")
-            .onInterface(kManagerIf).storeResultsTo(techs);
-
-        QString wifiPath, btPath;
-        bool wifiPowered = false, wifiConnected = false, btPowered = false;
-        for (const auto &t : techs) {
-            const auto &path  = t.get<0>();
-            const auto &props = t.get<1>();
-            QString type;
-            if (auto it = props.find("Type"); it != props.end())
-                type = variantStr(it->second);
-            const bool powered = props.count("Powered") ? variantBool(props.at("Powered")) : false;
-            const bool connected = props.count("Connected") ? variantBool(props.at("Connected")) : false;
-            if (type == QLatin1String("wifi")) {
-                wifiPath = QString::fromStdString(path);
-                wifiPowered = powered;
-                wifiConnected = connected;
-            } else if (type == QLatin1String("bluetooth")) {
-                btPath = QString::fromStdString(path);
-                btPowered = powered;
+        QString ssid;
+        try {
+            auto cur = m_iface->getProperty("CurrentBSS")
+                              .onInterface(kIfaceIf).get<sdbus::ObjectPath>();
+            if (!std::string(cur).empty() && std::string(cur) != "/") {
+                auto bss = sdbus::createProxy(*m_conn,
+                    sdbus::ServiceName{kService},
+                    sdbus::ObjectPath{cur});
+                auto bytes = bss->getProperty("SSID")
+                                .onInterface(kBssIf).get<std::vector<uint8_t>>();
+                ssid = ssidFromBytes(bytes);
             }
-        }
+        } catch (...) { /* no current bss */ }
 
-        bool dirty = (wifiPath != m_wifiTechPath) || (btPath != m_btTechPath)
-                  || (wifiPowered != m_wifiPowered) || (wifiConnected != m_wifiConnected)
-                  || (btPowered != m_btPowered);
-        m_wifiTechPath  = wifiPath;
-        m_btTechPath    = btPath;
-        m_wifiPowered   = wifiPowered;
-        m_wifiConnected = wifiConnected;
-        m_btPowered     = btPowered;
-        if (dirty) emit changed();
+        if (s != m_state || ssid != m_currentSsid || m_wifiPowered != prevPowered) {
+            m_state       = s;
+            m_currentSsid = ssid;
+            emit changed();
+        }
     } catch (const sdbus::Error &e) {
-        qWarning() << "NetworkController: GetTechnologies failed:" << e.getMessage().c_str();
+        qWarning() << "NetworkController: refreshState:" << e.getMessage().c_str();
     }
 }
 
-void NetworkController::refreshServices() {
-    if (!m_managerProxy) return;
+void NetworkController::rebuildNetworks() {
+    if (!m_iface) return;
     try {
-        using SvcEntry = sdbus::Struct<sdbus::ObjectPath,
-                                       std::map<std::string, sdbus::Variant>>;
-        std::vector<SvcEntry> svcs;
-        m_managerProxy->callMethod("GetServices")
-            .onInterface(kManagerIf).storeResultsTo(svcs);
+        auto bsss = m_iface->getProperty("BSSs")
+                          .onInterface(kIfaceIf).get<std::vector<sdbus::ObjectPath>>();
 
-        QVariantList out;
-        out.reserve(static_cast<int>(svcs.size()));
-        for (const auto &s : svcs) {
-            const auto &path  = s.get<0>();
-            const auto &props = s.get<1>();
-            QString type;
-            if (auto it = props.find("Type"); it != props.end())
-                type = variantStr(it->second);
-            if (type != QLatin1String("wifi")) continue;
-
-            QVariantMap n;
-            n["path"]     = QString::fromStdString(path);
-            n["name"]     = props.count("Name")     ? variantStr(props.at("Name"))     : QStringLiteral("(oculta)");
-            n["state"]    = props.count("State")    ? variantStr(props.at("State"))    : QString();
-            n["strength"] = props.count("Strength") ? int(variantU8(props.at("Strength"))) : 0;
-            n["favorite"] = props.count("Favorite") ? variantBool(props.at("Favorite")) : false;
-
-            QString security;
-            if (auto it = props.find("Security"); it != props.end()) {
+        // Build a set of saved SSIDs by walking Networks.
+        QSet<QString> saved;
+        try {
+            auto nets = m_iface->getProperty("Networks")
+                              .onInterface(kIfaceIf).get<std::vector<sdbus::ObjectPath>>();
+            for (const auto &np : nets) {
+                auto n = sdbus::createProxy(*m_conn,
+                    sdbus::ServiceName{kService}, sdbus::ObjectPath{np});
                 try {
-                    auto v = it->second.get<std::vector<std::string>>();
-                    if (!v.empty()) security = QString::fromStdString(v.front());
+                    auto props = n->getProperty("Properties")
+                                  .onInterface(kNetworkIf)
+                                  .get<std::map<std::string, sdbus::Variant>>();
+                    auto it = props.find("ssid");
+                    if (it != props.end()) {
+                        QString s = variantStr(it->second);
+                        // wpa_supplicant returns ssid wrapped in quotes
+                        if (s.startsWith('"') && s.endsWith('"'))
+                            s = s.mid(1, s.size() - 2);
+                        saved.insert(s);
+                    }
                 } catch (...) {}
             }
-            n["security"] = security.isEmpty() ? QStringLiteral("none") : security;
-            out.push_back(n);
+        } catch (...) {}
+
+        QVariantList out;
+        QHash<QString, int> bestBySsid;   // dedup, keep strongest signal per SSID
+        out.reserve(static_cast<int>(bsss.size()));
+        for (const auto &p : bsss) {
+            try {
+                auto bss = sdbus::createProxy(*m_conn,
+                    sdbus::ServiceName{kService}, sdbus::ObjectPath{p});
+                auto ssidBytes = bss->getProperty("SSID")
+                                    .onInterface(kBssIf).get<std::vector<uint8_t>>();
+                if (ssidBytes.empty()) continue;
+                QString ssid = ssidFromBytes(ssidBytes);
+                int signalDbm = bss->getProperty("Signal")
+                                   .onInterface(kBssIf).get<int16_t>();
+                int freq      = int(bss->getProperty("Frequency")
+                                       .onInterface(kBssIf).get<uint16_t>());
+
+                // Detect security: WPA / RSN dicts non-empty -> secured.
+                QString security = "none";
+                try {
+                    auto rsn = bss->getProperty("RSN")
+                                  .onInterface(kBssIf)
+                                  .get<std::map<std::string, sdbus::Variant>>();
+                    if (!rsn.empty() && rsn.count("KeyMgmt"))
+                        security = "wpa2";
+                } catch (...) {}
+                if (security == "none") {
+                    try {
+                        auto wpa = bss->getProperty("WPA")
+                                      .onInterface(kBssIf)
+                                      .get<std::map<std::string, sdbus::Variant>>();
+                        if (!wpa.empty() && wpa.count("KeyMgmt"))
+                            security = "wpa";
+                    } catch (...) {}
+                }
+
+                // dBm → percent: -50 = 100%, -100 = 0%
+                int strength = qBound(0, 2 * (signalDbm + 100), 100);
+
+                auto idxIt = bestBySsid.find(ssid);
+                if (idxIt != bestBySsid.end()) {
+                    QVariantMap existing = out[idxIt.value()].toMap();
+                    if (existing["strength"].toInt() >= strength) continue;
+                    out.removeAt(idxIt.value());
+                }
+
+                QVariantMap n;
+                n["ssid"]      = ssid;
+                n["strength"]  = strength;
+                n["frequency"] = freq;
+                n["security"]  = security;
+                n["saved"]     = saved.contains(ssid);
+                bestBySsid[ssid] = out.size();
+                out.append(n);
+            } catch (...) { /* skip this BSS */ }
         }
+
+        // Sort by signal strength desc.
+        std::sort(out.begin(), out.end(), [](const QVariant &a, const QVariant &b){
+            return a.toMap()["strength"].toInt() > b.toMap()["strength"].toInt();
+        });
+
         m_networks = std::move(out);
         emit networksChanged();
     } catch (const sdbus::Error &e) {
-        qWarning() << "NetworkController: GetServices failed:" << e.getMessage().c_str();
+        qWarning() << "NetworkController: rebuildNetworks:" << e.getMessage().c_str();
     }
 }
 
-void NetworkController::setTechnologyPowered(const char *type, bool on) {
-    if (!m_conn) return;
-    QString path = (QString::fromLatin1("wifi") == QString::fromLatin1(type))
-                     ? m_wifiTechPath : m_btTechPath;
-    if (path.isEmpty()) {
-        emit errorOccurred(QStringLiteral("technology not present: ") + QString::fromLatin1(type));
-        return;
-    }
+QString NetworkController::findSavedNetworkPath(const QString &ssid) const {
+    if (!m_iface) return {};
     try {
-        auto p = sdbus::createProxy(*m_conn,
-            sdbus::ServiceName{kService},
-            sdbus::ObjectPath{path.toStdString()});
-        p->callMethod("SetProperty").onInterface(kTechIf)
-            .withArguments(std::string{"Powered"}, sdbus::Variant{on});
+        auto nets = m_iface->getProperty("Networks")
+                          .onInterface(kIfaceIf).get<std::vector<sdbus::ObjectPath>>();
+        for (const auto &np : nets) {
+            auto n = sdbus::createProxy(*m_conn,
+                sdbus::ServiceName{kService}, sdbus::ObjectPath{np});
+            try {
+                auto props = n->getProperty("Properties")
+                              .onInterface(kNetworkIf)
+                              .get<std::map<std::string, sdbus::Variant>>();
+                auto it = props.find("ssid");
+                if (it != props.end()) {
+                    QString s = variantStr(it->second);
+                    if (s.startsWith('"') && s.endsWith('"'))
+                        s = s.mid(1, s.size() - 2);
+                    if (s == ssid) return QString::fromStdString(np);
+                }
+            } catch (...) {}
+        }
+    } catch (...) {}
+    return {};
+}
+
+QString NetworkController::addNetwork(const QString &ssid, const QString &psk) {
+    if (!m_iface) return {};
+    std::map<std::string, sdbus::Variant> args;
+    // wpa_supplicant expects ssid quoted, raw inside Variant string.
+    args["ssid"] = sdbus::Variant{std::string{"\""} + ssid.toStdString() + "\""};
+    if (psk.isEmpty()) {
+        args["key_mgmt"] = sdbus::Variant{std::string{"NONE"}};
+    } else {
+        args["psk"]      = sdbus::Variant{std::string{"\""} + psk.toStdString() + "\""};
+        args["key_mgmt"] = sdbus::Variant{std::string{"WPA-PSK"}};
+    }
+
+    sdbus::ObjectPath path;
+    try {
+        m_iface->callMethod("AddNetwork").onInterface(kIfaceIf)
+               .withArguments(args).storeResultsTo(path);
+    } catch (const sdbus::Error &e) {
+        emit errorOccurred(QString::fromStdString(e.getMessage()));
+        return {};
+    }
+    return QString::fromStdString(path);
+}
+
+void NetworkController::selectNetworkPath(const QString &path) {
+    if (!m_iface || path.isEmpty()) return;
+    try {
+        m_iface->callMethod("SelectNetwork").onInterface(kIfaceIf)
+               .withArguments(sdbus::ObjectPath{path.toStdString()})
+               .dontExpectReply();
     } catch (const sdbus::Error &e) {
         emit errorOccurred(QString::fromStdString(e.getMessage()));
     }
 }
 
-void NetworkController::setWifiPowered(bool on)      { setTechnologyPowered("wifi", on); }
-void NetworkController::setBluetoothPowered(bool on) { setTechnologyPowered("bluetooth", on); }
+// ── Mutators ────────────────────────────────────────────────────────────────
+
+void NetworkController::setWifiPowered(bool /*on*/) {
+    // wpa_supplicant has no direct "power" toggle. The interface stays
+    // active once registered; toggling it cleanly would mean removing the
+    // interface object, which also drops scan results. We treat the flag
+    // as read-only for now and surface true while the iface object exists.
+    // TODO: rfkill block/unblock for a real off-switch.
+}
 
 void NetworkController::scanWifi() {
-    if (m_wifiTechPath.isEmpty() || !m_conn) return;
+    if (!m_iface) return;
+    std::map<std::string, sdbus::Variant> args;
+    args["Type"] = sdbus::Variant{std::string{"active"}};
     try {
-        auto p = sdbus::createProxy(*m_conn,
-            sdbus::ServiceName{kService},
-            sdbus::ObjectPath{m_wifiTechPath.toStdString()});
-        p->callMethod("Scan").onInterface(kTechIf).dontExpectReply();
+        m_iface->callMethod("Scan").onInterface(kIfaceIf)
+               .withArguments(args).dontExpectReply();
     } catch (const sdbus::Error &e) {
         emit errorOccurred(QString::fromStdString(e.getMessage()));
     }
 }
 
-void NetworkController::connectService(const QString &path) {
-    if (!m_conn) return;
+void NetworkController::connectOpen(const QString &ssid) {
+    QString path = findSavedNetworkPath(ssid);
+    if (path.isEmpty()) path = addNetwork(ssid, {});
+    selectNetworkPath(path);
+}
+
+void NetworkController::connectWithPassphrase(const QString &ssid, const QString &psk) {
+    // If we already saved this SSID, drop it so the new PSK takes effect.
+    QString existing = findSavedNetworkPath(ssid);
+    if (!existing.isEmpty()) {
+        try {
+            m_iface->callMethod("RemoveNetwork").onInterface(kIfaceIf)
+                   .withArguments(sdbus::ObjectPath{existing.toStdString()})
+                   .dontExpectReply();
+        } catch (...) {}
+    }
+    QString path = addNetwork(ssid, psk);
+    selectNetworkPath(path);
+}
+
+void NetworkController::disconnectCurrent() {
+    if (!m_iface) return;
     try {
-        auto p = sdbus::createProxy(*m_conn,
-            sdbus::ServiceName{kService},
-            sdbus::ObjectPath{path.toStdString()});
-        p->callMethod("Connect").onInterface(kServiceIf).dontExpectReply();
+        m_iface->callMethod("Disconnect").onInterface(kIfaceIf).dontExpectReply();
     } catch (const sdbus::Error &e) {
         emit errorOccurred(QString::fromStdString(e.getMessage()));
     }
 }
 
-void NetworkController::connectWithPassphrase(const QString &path, const QString &psk) {
-    m_pendingCredentials.insert(path, psk);
-    connectService(path);
-}
-
-void NetworkController::disconnectService(const QString &path) {
-    if (!m_conn) return;
+void NetworkController::forgetSsid(const QString &ssid) {
+    QString path = findSavedNetworkPath(ssid);
+    if (path.isEmpty() || !m_iface) return;
     try {
-        auto p = sdbus::createProxy(*m_conn,
-            sdbus::ServiceName{kService},
-            sdbus::ObjectPath{path.toStdString()});
-        p->callMethod("Disconnect").onInterface(kServiceIf).dontExpectReply();
-    } catch (const sdbus::Error &e) {
-        emit errorOccurred(QString::fromStdString(e.getMessage()));
-    }
-}
-
-void NetworkController::forgetService(const QString &path) {
-    if (!m_conn) return;
-    try {
-        auto p = sdbus::createProxy(*m_conn,
-            sdbus::ServiceName{kService},
-            sdbus::ObjectPath{path.toStdString()});
-        p->callMethod("Remove").onInterface(kServiceIf).dontExpectReply();
+        m_iface->callMethod("RemoveNetwork").onInterface(kIfaceIf)
+               .withArguments(sdbus::ObjectPath{path.toStdString()})
+               .dontExpectReply();
     } catch (const sdbus::Error &e) {
         emit errorOccurred(QString::fromStdString(e.getMessage()));
     }
