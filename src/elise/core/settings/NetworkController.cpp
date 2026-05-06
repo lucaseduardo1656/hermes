@@ -89,6 +89,8 @@ void NetworkController::connect() {
                 }, Qt::QueuedConnection);
             });
 
+        registerAgent();
+
         m_conn->enterEventLoopAsync();
 
         refreshAll();
@@ -96,6 +98,60 @@ void NetworkController::connect() {
         qWarning() << "NetworkController: connect failed:"
                    << e.getName().c_str() << "—" << e.getMessage().c_str();
         m_retryTimer.start();
+    }
+}
+
+// ConnMan calls into us at /elise/Agent for credentials when a service
+// needs them. Spec: connman/doc/agent-api.txt. We answer RequestInput by
+// looking up the cached PSK that the UI stashed via connectWithPassphrase.
+// Released after a single use to avoid leaking the secret in memory.
+void NetworkController::registerAgent() {
+    if (!m_conn) return;
+
+    m_agent = sdbus::createObject(*m_conn,
+        sdbus::ObjectPath{"/elise/Agent"});
+
+    using FieldsIn  = std::map<std::string, sdbus::Variant>;
+    using FieldsOut = std::map<std::string, sdbus::Variant>;
+
+    m_agent->addVTable(
+        sdbus::registerMethod("Release").implementedAs([](){ /* nothing */ }),
+
+        sdbus::registerMethod("ReportError")
+            .withInputParamNames("service", "error")
+            .implementedAs([this](sdbus::ObjectPath svc, std::string err) {
+                QString p = QString::fromStdString(svc);
+                QString e = QString::fromStdString(err);
+                QMetaObject::invokeMethod(this, [this, p, e]{
+                    m_pendingCredentials.remove(p);
+                    emit errorOccurred(p + QStringLiteral(": ") + e);
+                }, Qt::QueuedConnection);
+            }),
+
+        sdbus::registerMethod("RequestInput")
+            .withInputParamNames("service", "fields")
+            .withOutputParamNames("result")
+            .implementedAs([this](sdbus::ObjectPath svc, FieldsIn /*fields*/) -> FieldsOut {
+                FieldsOut out;
+                QString p = QString::fromStdString(svc);
+                const QString psk = m_pendingCredentials.value(p);
+                if (!psk.isEmpty()) {
+                    out["Passphrase"] = sdbus::Variant{psk.toStdString()};
+                    m_pendingCredentials.remove(p);
+                }
+                return out;
+            }),
+
+        sdbus::registerMethod("Cancel").implementedAs([](){ /* nothing */ })
+    ).forInterface("net.connman.Agent");
+
+    try {
+        m_managerProxy->callMethod("RegisterAgent")
+            .onInterface(kManagerIf)
+            .withArguments(sdbus::ObjectPath{"/elise/Agent"});
+    } catch (const sdbus::Error &e) {
+        // Already registered (e.g. after a reconnect): tolerate it.
+        qWarning() << "NetworkController: RegisterAgent:" << e.getMessage().c_str();
     }
 }
 
@@ -250,6 +306,11 @@ void NetworkController::connectService(const QString &path) {
     } catch (const sdbus::Error &e) {
         emit errorOccurred(QString::fromStdString(e.getMessage()));
     }
+}
+
+void NetworkController::connectWithPassphrase(const QString &path, const QString &psk) {
+    m_pendingCredentials.insert(path, psk);
+    connectService(path);
 }
 
 void NetworkController::disconnectService(const QString &path) {

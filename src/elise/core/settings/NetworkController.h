@@ -1,11 +1,12 @@
 #pragma once
 #include <QObject>
+#include <QHash>
 #include <QString>
 #include <QVariantList>
 #include <QTimer>
 #include <memory>
 
-namespace sdbus { class IConnection; class IProxy; }
+namespace sdbus { class IConnection; class IProxy; class IObject; }
 
 // Client wrapper around net.connman.Manager (system bus, "/").
 //
@@ -54,6 +55,11 @@ public:
     Q_INVOKABLE void setBluetoothPowered(bool on);
     Q_INVOKABLE void scanWifi();
     Q_INVOKABLE void connectService(const QString &path);
+    // Stash a passphrase for the given service path, then call Connect on
+    // it. The registered net.connman.Agent will reply to RequestInput
+    // with the cached value when ConnMan asks. Cleared after the agent
+    // hands it over (single-use).
+    Q_INVOKABLE void connectWithPassphrase(const QString &path, const QString &passphrase);
     Q_INVOKABLE void disconnectService(const QString &path);
     Q_INVOKABLE void forgetService(const QString &path);
 
@@ -70,8 +76,12 @@ private:
     void refreshServices();
     void setTechnologyPowered(const char *type, bool on);
 
+    void registerAgent();
+
     std::unique_ptr<sdbus::IConnection> m_conn;
     std::unique_ptr<sdbus::IProxy>      m_managerProxy;
+    std::unique_ptr<sdbus::IObject>     m_agent;
+    QHash<QString, QString>             m_pendingCredentials;   // path -> psk
 
     QTimer  m_retryTimer;
     QString m_state;
