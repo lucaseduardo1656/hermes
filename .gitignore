@@ -15,6 +15,7 @@ app/.qt/
 src/hermes-app/build/
 src/elise/build/
 /build/
+/build-elise/
 
 # Claude Code local config
 .claude/

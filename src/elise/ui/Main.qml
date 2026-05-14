@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.VirtualKeyboard
 import Elise
 
 // Root window for the Elise infotainment UI.
@@ -95,11 +94,20 @@ Window {
         z: 1200
     }
 
-    // ── Virtual keyboard ─────────────────────────────────────────────────────
-    InputPanel {
-        z: 1100
-        x: 0; width: parent.width
-        y: active ? parent.height - height : parent.height
-        Behavior on y { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
+    // ── Global on-screen keyboard ────────────────────────────────────────────
+    // Top of the z-stack so it covers settings sidebar + modals.
+    // Driven by the `Keyboard` singleton; any page does `Keyboard.show(...)`.
+    SoftKeyboard {
+        z: 1400
     }
+
+    // ── Global action sheet (contextual menus) ───────────────────────────────
+    // Above the keyboard so long-press menus over a field still get focus.
+    ActionSheetView {
+        z: 1500
+    }
+
+    // QtVirtualKeyboard's InputPanel is intentionally absent — Qt's IM plugin
+    // refuses to attach client-side under cage/Wayland. We use the QML
+    // SoftKeyboard above instead.
 }

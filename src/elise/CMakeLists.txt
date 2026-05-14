@@ -8,6 +8,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Svg Network Multimedia)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDBUS_CPP REQUIRED IMPORTED_TARGET sdbus-c++)
+pkg_check_modules(MPV      REQUIRED IMPORTED_TARGET mpv)
 
 # HermesIpc is optional in dev (host build without buildroot may not have it).
 # When available, we use it to generate proxy stubs from canonical XML; when
@@ -33,6 +34,12 @@ qt_add_executable(elise
 )
 
 set_source_files_properties(ui/Theme.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE TRUE
+)
+set_source_files_properties(ui/Keyboard.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE TRUE
+)
+set_source_files_properties(ui/ActionSheet.qml PROPERTIES
     QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -61,6 +68,13 @@ qt_add_qml_module(elise
         ui/SettingsPageContas.qml
         ui/SettingsPageVeiculo.qml
         ui/SettingsPageConectividade.qml
+        ui/SettingsPageWifiList.qml
+        ui/SoftKeyboard.qml
+        ui/KeyboardKey.qml
+        ui/Keyboard.qml
+        ui/ActionSheet.qml
+        ui/ActionSheetView.qml
+        ui/TrackList.qml
         ui/SettingsPageInterface.qml
         ui/SettingsPageSom.qml
         ui/SettingsPageSistema.qml
@@ -96,6 +110,10 @@ qt_add_resources(elise "elise_icons"
         icons/volume.svg
         icons/info.svg
         icons/chevron-right.svg
+        icons/backspace.svg
+        icons/mic.svg
+        icons/eye.svg
+        icons/eye-off.svg
 )
 
 target_link_libraries(elise PRIVATE
@@ -107,6 +125,7 @@ target_link_libraries(elise PRIVATE
     Qt6::Network
     Qt6::Multimedia
     PkgConfig::SDBUS_CPP
+    PkgConfig::MPV
 )
 
 # Generate the org.hermes.System1 client proxy from the canonical XML.

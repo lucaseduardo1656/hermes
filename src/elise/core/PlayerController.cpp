@@ -6,6 +6,27 @@
 #include <QJsonArray>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QDebug>
+
+#include <mpv/client.h>
+
+namespace {
+// Property reply IDs used with mpv_observe_property; values are arbitrary,
+// just need to be distinct so we can route MPV_EVENT_PROPERTY_CHANGE.
+constexpr uint64_t kPropTimePos     = 1;
+constexpr uint64_t kPropDuration    = 2;
+constexpr uint64_t kPropPause       = 3;
+constexpr uint64_t kPropEofReached  = 4;
+constexpr uint64_t kPropCoreIdle    = 5;
+
+// mpv_set_wakeup_callback fires on the mpv worker thread. Re-enter the Qt
+// thread via a queued invocation, then drain events there.
+void mpvWakeupTrampoline(void *ctx)
+{
+    auto *self = static_cast<PlayerController *>(ctx);
+    QMetaObject::invokeMethod(self, "_mpvWakeupQueued", Qt::QueuedConnection);
+}
+} // namespace
 
 PlayerController::PlayerController(QObject *parent)
     : QObject(parent)
@@ -16,26 +37,60 @@ PlayerController::PlayerController(QObject *parent)
     pollStatus();
 }
 
-PlayerController::~PlayerController() = default;
+PlayerController::~PlayerController()
+{
+    if (m_mpv) {
+        mpv_terminate_destroy(m_mpv);
+        m_mpv = nullptr;
+    }
+}
 
 // ── Lazy player init ──────────────────────────────────────────────────────────
 
 bool PlayerController::ensurePlayer()
 {
-    if (m_player) return true;
-    m_player = new QMediaPlayer(this);
-    m_audio  = new QAudioOutput(this);
-    m_player->setAudioOutput(m_audio);
-    connect(m_player, &QMediaPlayer::playbackStateChanged,
-            this, &PlayerController::onPlayerStateChanged);
-    connect(m_player, &QMediaPlayer::mediaStatusChanged,
-            this, &PlayerController::onMediaStatusChanged);
-    connect(m_player, &QMediaPlayer::errorOccurred,
-            this, &PlayerController::onPlayerError);
-    connect(m_player, &QMediaPlayer::positionChanged,
-            this, &PlayerController::progressChanged);
-    connect(m_player, &QMediaPlayer::durationChanged,
-            this, &PlayerController::durationChanged);
+    if (m_mpv) return true;
+
+    m_mpv = mpv_create();
+    if (!m_mpv) {
+        qWarning() << "[PlayerController] mpv_create failed";
+        return false;
+    }
+
+    // Audio-only, no terminal UI, no built-in yt-dlp (we resolve via daemon).
+    mpv_set_option_string(m_mpv, "vid",                   "no");
+    mpv_set_option_string(m_mpv, "audio-display",         "no");
+    mpv_set_option_string(m_mpv, "ytdl",                  "no");
+    mpv_set_option_string(m_mpv, "terminal",              "no");
+    mpv_set_option_string(m_mpv, "input-default-bindings","no");
+    mpv_set_option_string(m_mpv, "input-vo-keyboard",     "no");
+    mpv_set_option_string(m_mpv, "idle",                  "yes");
+
+    // Progressive download cache — this is the whole reason we picked libmpv.
+    // Streams to disk while playing so pause/seek are local, instant.
+    mpv_set_option_string(m_mpv, "cache",              "yes");
+    mpv_set_option_string(m_mpv, "cache-secs",         "300");
+    mpv_set_option_string(m_mpv, "demuxer-max-bytes",  "150MiB");
+    mpv_set_option_string(m_mpv, "demuxer-readahead-secs", "60");
+
+    if (mpv_initialize(m_mpv) < 0) {
+        qWarning() << "[PlayerController] mpv_initialize failed";
+        mpv_destroy(m_mpv);
+        m_mpv = nullptr;
+        return false;
+    }
+
+    mpv_observe_property(m_mpv, kPropTimePos,    "time-pos",    MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_mpv, kPropDuration,   "duration",    MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_mpv, kPropPause,      "pause",       MPV_FORMAT_FLAG);
+    mpv_observe_property(m_mpv, kPropEofReached, "eof-reached", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_mpv, kPropCoreIdle,   "core-idle",   MPV_FORMAT_FLAG);
+
+    // Surface mpv errors/warnings to stderr (journalctl picks them up via
+    // the elise unit). Temporary while we debug seek/pause behaviour.
+    mpv_request_log_messages(m_mpv, "info");
+
+    mpv_set_wakeup_callback(m_mpv, &mpvWakeupTrampoline, this);
     return true;
 }
 
@@ -43,25 +98,26 @@ bool PlayerController::ensurePlayer()
 
 qreal PlayerController::progress() const
 {
-    if (!m_player || m_player->duration() <= 0) return 0.0;
-    return qreal(m_player->position()) / qreal(m_player->duration());
+    if (m_durationMs <= 0) return 0.0;
+    return qreal(m_positionMs) / qreal(m_durationMs);
 }
 
 // ── Playback controls ─────────────────────────────────────────────────────────
 
 void PlayerController::togglePlay()
 {
-    if (!m_player) return;
-    if (m_player->playbackState() == QMediaPlayer::PlayingState)
-        m_player->pause();
-    else
-        m_player->play();
+    if (!m_mpv) return;
+    int paused = 0;
+    mpv_get_property(m_mpv, "pause", MPV_FORMAT_FLAG, &paused);
+    int target = paused ? 0 : 1;
+    mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &target);
 }
 
 void PlayerController::previous()
 {
-    if (m_player && m_player->position() > 3000) {
-        m_player->setPosition(0);
+    if (m_mpv && m_positionMs > 3000) {
+        double zero = 0.0;
+        mpv_set_property(m_mpv, "time-pos", MPV_FORMAT_DOUBLE, &zero);
         return;
     }
     advanceQueue(-1);
@@ -74,8 +130,9 @@ void PlayerController::next()
 
 void PlayerController::seekTo(qreal fraction)
 {
-    if (!m_player || m_player->duration() <= 0) return;
-    m_player->setPosition(qint64(fraction * m_player->duration()));
+    if (!m_mpv || m_durationMs <= 0) return;
+    double target = (fraction * m_durationMs) / 1000.0;   // seconds
+    mpv_set_property(m_mpv, "time-pos", MPV_FORMAT_DOUBLE, &target);
 }
 
 void PlayerController::advanceQueue(int delta)
@@ -121,10 +178,20 @@ void PlayerController::resolveAndPlay(const QVariant &track)
             return;
         }
         if (!ensurePlayer()) return;
-        m_player->setSource(QUrl(url));
-        m_player->play();
 
-        // Notify daemon
+        const QByteArray urlUtf8 = url.toUtf8();
+        const char *cmd[] = { "loadfile", urlUtf8.constData(), nullptr };
+        int rc = mpv_command(m_mpv, cmd);
+        if (rc < 0) {
+            qWarning() << "[PlayerController] mpv loadfile failed:" << mpv_error_string(rc);
+            return;
+        }
+
+        // mpv defaults to playing on load; ensure pause=no.
+        int unpause = 0;
+        mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &unpause);
+
+        // Notify daemon (for /played history).
         QVariantMap t = track.toMap();
         QJsonObject body = QJsonObject::fromVariantMap(t);
         post("/played", QJsonDocument(body).toJson(QJsonDocument::Compact));
@@ -229,27 +296,86 @@ void PlayerController::pollStatus()
     });
 }
 
-// ── Player event handlers ─────────────────────────────────────────────────────
+// ── mpv event pump ────────────────────────────────────────────────────────────
 
-void PlayerController::onPlayerStateChanged(QMediaPlayer::PlaybackState state)
+void PlayerController::_mpvWakeupQueued()
 {
-    bool playing = (state == QMediaPlayer::PlayingState);
-    if (m_playing != playing) {
-        m_playing = playing;
-        emit playingChanged();
+    drainMpvEvents();
+}
+
+void PlayerController::drainMpvEvents()
+{
+    if (!m_mpv) return;
+    while (true) {
+        mpv_event *ev = mpv_wait_event(m_mpv, 0);
+        if (!ev || ev->event_id == MPV_EVENT_NONE) break;
+
+        switch (ev->event_id) {
+        case MPV_EVENT_PROPERTY_CHANGE: {
+            auto *p = static_cast<mpv_event_property *>(ev->data);
+            switch (ev->reply_userdata) {
+            case kPropTimePos: {
+                if (p->format == MPV_FORMAT_DOUBLE) {
+                    double s = *static_cast<double *>(p->data);
+                    qint64 ms = qint64(s * 1000.0);
+                    if (ms != m_positionMs) {
+                        m_positionMs = ms;
+                        emit progressChanged();
+                    }
+                }
+                break;
+            }
+            case kPropDuration: {
+                if (p->format == MPV_FORMAT_DOUBLE) {
+                    double s = *static_cast<double *>(p->data);
+                    qint64 ms = qint64(s * 1000.0);
+                    if (ms != m_durationMs) {
+                        m_durationMs = ms;
+                        emit durationChanged();
+                    }
+                }
+                break;
+            }
+            case kPropPause: {
+                if (p->format == MPV_FORMAT_FLAG) {
+                    int paused = *static_cast<int *>(p->data);
+                    bool playing = !paused;
+                    if (playing != m_playing) {
+                        m_playing = playing;
+                        emit playingChanged();
+                    }
+                }
+                break;
+            }
+            case kPropEofReached: {
+                if (p->format == MPV_FORMAT_FLAG) {
+                    int eof = *static_cast<int *>(p->data);
+                    if (eof) next();
+                }
+                break;
+            }
+            default: break;
+            }
+            break;
+        }
+        case MPV_EVENT_END_FILE: {
+            auto *ef = static_cast<mpv_event_end_file *>(ev->data);
+            // Only auto-advance on natural end; ignore user-initiated stops.
+            if (ef && ef->reason == MPV_END_FILE_REASON_EOF)
+                next();
+            break;
+        }
+        case MPV_EVENT_LOG_MESSAGE: {
+            auto *m = static_cast<mpv_event_log_message *>(ev->data);
+            qWarning() << "[mpv]" << m->prefix << m->text;
+            break;
+        }
+        case MPV_EVENT_SHUTDOWN:
+            return;
+        default:
+            break;
+        }
     }
-}
-
-void PlayerController::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
-{
-    if (status == QMediaPlayer::EndOfMedia)
-        next();
-}
-
-void PlayerController::onPlayerError(QMediaPlayer::Error, const QString &msg)
-{
-    qWarning() << "[PlayerController] media error:" << msg;
-    setLoading(false);
 }
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────

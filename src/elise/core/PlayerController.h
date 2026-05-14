@@ -3,14 +3,18 @@
 #include <QTimer>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
-#include <QMediaPlayer>
-#include <QAudioOutput>
 #include <QList>
 #include <QVariant>
 #include <QString>
 #include <QUrl>
 #include <functional>
 
+struct mpv_handle;
+
+// Music playback driven by libmpv (industry-standard, used by mpv, Jellyfin,
+// Plasma Bigscreen, etc.). libmpv handles progressive HTTP cache, seek, and
+// pause natively — Qt's QMediaPlayer + GStreamer souphttpsrc tore down the
+// pipeline on seek/pause, which broke UX with streamed YouTube URLs.
 class PlayerController : public QObject {
     Q_OBJECT
 
@@ -34,8 +38,8 @@ public:
 
     bool    playing()     const { return m_playing; }
     qreal   progress()    const;
-    qint64  positionMs()  const { return m_player ? m_player->position() : 0; }
-    qint64  durationMs()  const { return m_player ? m_player->duration() : 0; }
+    qint64  positionMs()  const { return m_positionMs; }
+    qint64  durationMs()  const { return m_durationMs; }
     QString trackTitle()  const { return m_trackTitle; }
     QString trackArtist() const { return m_trackArtist; }
     QString trackAlbum()  const { return m_trackAlbum; }
@@ -81,6 +85,10 @@ private:
     void setTrack(const QVariant &t);
     void setLoading(bool v);
 
+    // Drain queued mpv events on the Qt thread. Called from a queued slot
+    // dispatched by the libmpv wakeup callback (which runs on mpv's thread).
+    void drainMpvEvents();
+
     void get(const QString &path,
              std::function<void(const QJsonObject &)> cb);
     void post(const QString &path, const QByteArray &body,
@@ -88,13 +96,14 @@ private:
     QUrl daemonUrl(const QString &path) const;
 
     QNetworkAccessManager *m_nam  = nullptr;
-    QMediaPlayer          *m_player = nullptr;
-    QAudioOutput          *m_audio  = nullptr;
+    mpv_handle            *m_mpv  = nullptr;
     QTimer                 m_pollTimer;
 
     QString m_daemonHost = "http://127.0.0.1:8765";
 
     bool    m_playing     = false;
+    qint64  m_positionMs  = 0;
+    qint64  m_durationMs  = 0;
     QString m_trackTitle;
     QString m_trackArtist;
     QString m_trackAlbum;
@@ -108,8 +117,5 @@ private:
     bool m_loading     = false;
     QVariantMap m_sources;
 
-private slots:
-    void onPlayerStateChanged(QMediaPlayer::PlaybackState state);
-    void onMediaStatusChanged(QMediaPlayer::MediaStatus status);
-    void onPlayerError(QMediaPlayer::Error error, const QString &msg);
+    Q_INVOKABLE void _mpvWakeupQueued();   // entry point for queued wakeups
 };

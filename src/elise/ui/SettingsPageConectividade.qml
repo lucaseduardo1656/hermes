@@ -1,211 +1,216 @@
 import QtQuick
-import QtQuick.Controls
 import Elise
 
-// Page: Conectividade — Wi-Fi, Bluetooth (TODO), Hotspot (TODO).
+// Page: Conectividade — Wi-Fi (top-level), Bluetooth (TODO), Hotspot (TODO).
 //
-// Bound to `Settings.network` (NetworkController over wpa_supplicant1).
-// Tapping a secured network opens an inline password modal; the typed
-// passphrase is fed straight to wpa_supplicant via AddNetwork.
+// Two-state internal router:
+//   * "main"  — overview card with toggle + Conectado info + Redes link
+//   * "list"  — full list of available networks (SettingsPageWifiList)
+//
+// Password input is delegated to the global `Keyboard` singleton (mounted
+// in Main.qml at top z) — any page in the system can request input the
+// same way, so the keyboard surface is unified.
 Item {
     id: root
     clip: true
+
+    property string view: "main"      // "main" | "list"
+
+    function _onNetworkOptions(n) {
+        const ssid = n.ssid
+        const isCurrent = ssid === Settings.network.currentSsid
+        const items = []
+
+        if (isCurrent) {
+            items.push({ label: "Desconectar",
+                         onSelected: function() { Settings.network.disconnectCurrent() } })
+        } else if (n.saved) {
+            items.push({ label: "Conectar",
+                         onSelected: function() { Settings.network.reconnectSaved(ssid) } })
+        } else if (n.security === "none") {
+            items.push({ label: "Conectar",
+                         onSelected: function() { Settings.network.connectOpen(ssid) } })
+        } else {
+            items.push({ label: "Conectar com senha",
+                         onSelected: function() { _onNetworkTap(n) } })
+        }
+
+        if (n.saved) {
+            items.push({ label: "Esquecer rede", destructive: true,
+                         onSelected: function() { Settings.network.forgetSsid(ssid) } })
+        }
+
+        items.push({ label: "Detalhes",
+                     onSelected: function() {
+                         // Placeholder — future: open a detail page with
+                         // BSSID, freq, signal, security, IP, etc.
+                     } })
+
+        ActionSheet.show({
+            title: ssid + (n.security !== "none" ? "  ·  seguro" : "  ·  aberta"),
+            items: items
+        })
+    }
 
     function _onNetworkTap(n) {
         if (n.ssid === Settings.network.currentSsid) {
             Settings.network.disconnectCurrent()
             return
         }
-        if (n.security === "none" || n.saved) {
+        // Saved network → just reconnect, don't ask password again.
+        // (forget via long-press / dedicated UI when wrong psk needs reset.)
+        if (n.saved) {
+            Settings.network.reconnectSaved(n.ssid)
+            return
+        }
+        if (n.security === "none") {
             Settings.network.connectOpen(n.ssid)
             return
         }
-        _prompt.show(n.ssid)
+        const ssid = n.ssid
+        Keyboard.show({
+            title:    "Senha de " + ssid,
+            password: true,
+            onSubmit: function(psk) {
+                Settings.network.connectWithPassphrase(ssid, psk)
+            }
+        })
     }
 
-    Flickable {
-        id: _flick
-        anchors.fill: parent
-        contentWidth:  width
-        contentHeight: _col.implicitHeight + Theme.spaceXL * 2
-
-        Column {
-            id: _col
-            anchors {
-                top: parent.top; topMargin: Theme.spaceXL
-                left: parent.left; leftMargin: Theme.spaceXL
-                right: parent.right; rightMargin: Theme.spaceXL
-            }
-            spacing: Theme.spaceXL
-
-            // ── Wi-Fi ────────────────────────────────────────────────────
-            SettingsCard {
-                title: "Wi-Fi"
-
-                SettingsAction {
-                    label: Settings.network.currentSsid !== ""
-                              ? "Conectado: " + Settings.network.currentSsid
-                              : "Desconectado"
-                    sublabel: Settings.network.state
-                }
-                SettingsAction {
-                    label: "Procurar redes"
-                    sublabel: Settings.network.networks.length + " visíveis"
-                    onTriggered: Settings.network.scanWifi()
-                }
-
-                Repeater {
-                    model: Settings.network.networks
-                    SettingsAction {
-                        label:    modelData.ssid
-                        sublabel: {
-                            const sec = modelData.security !== "none" ? "🔒 " : ""
-                            const sig = modelData.strength + "%"
-                            const cur = modelData.ssid === Settings.network.currentSsid ? " · conectado" : ""
-                            const sav = modelData.saved && cur === "" ? " · salva" : ""
-                            return sec + sig + cur + sav
-                        }
-                        onTriggered: root._onNetworkTap(modelData)
-                    }
-                }
-            }
-
-            // ── Bluetooth (TODO BlueZ) ───────────────────────────────────
-            SettingsCard {
-                title: "Bluetooth"
-                SettingsAction { label: "Em breve" }
-            }
-
-            // ── Hotspot (TODO) ───────────────────────────────────────────
-            SettingsCard {
-                title: "Hotspot"
-                SettingsAction { label: "Em breve" }
-            }
-        }
-    }
-
-    // ── Inline password prompt ──────────────────────────────────────────
-    Rectangle {
-        id: _prompt
-        anchors.fill: parent
-        color:   System.overlay
-        visible: false
-        z: 10
-
-        property string ssid: ""
-
-        function show(name) {
-            ssid        = name
-            _input.text = ""
-            visible     = true
-            _input.forceActiveFocus()
-        }
-        function hide() { visible = false }
-
-        // Eat taps on the dim layer.
-        MouseArea { anchors.fill: parent; onClicked: {} }
+    // ── Header (back arrow when in sub-view) ────────────────────────────
+    Item {
+        id: _header
+        anchors { top: parent.top; left: parent.left; right: parent.right }
+        height: root.view === "main" ? 0 : Theme.menuHeaderH
+        visible: height > 0
 
         Rectangle {
-            anchors.centerIn: parent
-            width:  Math.min(parent.width - Theme.space3XL * 2, 480)
-            color:  System.surface
-            radius: Theme.radiusL
-            border.color: System.border
-            border.width: Theme.borderHairline
-            height: _form.implicitHeight + Theme.spaceXL * 2
+            anchors.fill: parent
+            color: System.surface
+            Rectangle {
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: Theme.borderHairline
+                color:  System.border
+            }
+        }
+
+        Row {
+            anchors {
+                left: parent.left; leftMargin: Theme.spaceL
+                verticalCenter: parent.verticalCenter
+            }
+            spacing: Theme.spaceM
+
+            Rectangle {
+                width: Theme.btnMedium; height: Theme.btnMedium; radius: width / 2
+                color: _backArea.pressed ? System.pressOverlay : "transparent"
+                anchors.verticalCenter: parent.verticalCenter
+
+                SvgIcon {
+                    anchors.centerIn: parent
+                    source: "qrc:/icons/chevron-up.svg"
+                    color:  System.textPrimary
+                    size:   Theme.iconM
+                    rotation: -90
+                }
+                MouseArea {
+                    id: _backArea
+                    anchors.fill: parent
+                    onClicked: root.view = "main"
+                }
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Redes Wi-Fi"
+                color: System.textPrimary
+                font.pixelSize: Theme.fontTitle
+                font.weight: Font.Medium
+            }
+        }
+    }
+
+    // ── Body ────────────────────────────────────────────────────────────
+    Loader {
+        anchors {
+            top:    _header.bottom
+            left:   parent.left
+            right:  parent.right
+            bottom: parent.bottom
+        }
+        sourceComponent: root.view === "main" ? _mainView : _listView
+    }
+
+    Component {
+        id: _mainView
+        Flickable {
+            contentWidth:  width
+            contentHeight: _mainCol.implicitHeight + Theme.spaceXL * 2
 
             Column {
-                id: _form
+                id: _mainCol
                 anchors {
-                    left: parent.left; right: parent.right
-                    top:  parent.top
-                    margins: Theme.spaceXL
+                    top: parent.top; topMargin: Theme.spaceXL
+                    left: parent.left; leftMargin: Theme.spaceXL
+                    right: parent.right; rightMargin: Theme.spaceXL
                 }
-                spacing: Theme.spaceM
+                spacing: Theme.spaceXL
 
-                Text {
-                    text:  "Conectar a " + _prompt.ssid
-                    color: System.textPrimary
-                    font.pixelSize: Theme.fontTitle
-                    font.weight: Font.Medium
-                    elide: Text.ElideRight
-                    width: parent.width
-                }
-                Text {
-                    text:  "Digite a senha"
-                    color: System.textMuted
-                    font.pixelSize: Theme.fontSmall
-                }
+                SettingsCard {
+                    title: "Wi-Fi"
 
-                Rectangle {
-                    width:  parent.width
-                    height: 44
-                    color:  System.surface2
-                    radius: Theme.radiusM
-                    border.color: _input.activeFocus ? System.accent : System.border
-                    border.width: Theme.borderHairline
-
-                    TextInput {
-                        id: _input
-                        anchors {
-                            fill: parent
-                            leftMargin:  Theme.spaceM
-                            rightMargin: Theme.spaceM
+                    SettingsToggle {
+                        label: "Wi-Fi"
+                        checked: Settings.network.wifiPowered
+                        onToggled: (v) => Settings.network.setWifiPowered(v)
+                    }
+                    SettingsAction {
+                        label: {
+                            if (Settings.network.connectingSsid !== "")
+                                return "Conectando: " + Settings.network.connectingSsid
+                            if (Settings.network.currentSsid !== "")
+                                return "Conectado: " + Settings.network.currentSsid
+                            return "Desconectado"
                         }
-                        verticalAlignment: TextInput.AlignVCenter
-                        color: System.textPrimary
-                        font.pixelSize: Theme.fontLabel
-                        echoMode: TextInput.Password
-                        clip: true
-                        onAccepted: _connect.activate()
+                        sublabel: {
+                            if (Settings.network.lastError !== "")
+                                return Settings.network.lastError
+                            return Settings.network.state || "—"
+                        }
+                        onTriggered: {
+                            if (Settings.network.currentSsid !== "")
+                                Settings.network.disconnectCurrent()
+                        }
+                    }
+                    SettingsAction {
+                        label: "Redes disponíveis"
+                        sublabel: Settings.network.networks.length + " visíveis"
+                        onTriggered: {
+                            Settings.network.scanWifi()
+                            root.view = "list"
+                        }
                     }
                 }
 
-                Row {
-                    anchors.right: parent.right
-                    spacing: Theme.spaceM
+                SettingsCard {
+                    title: "Bluetooth"
+                    SettingsAction { label: "Em breve" }
+                }
 
-                    Rectangle {
-                        width: 110; height: Theme.btnMedium; radius: Theme.radiusM
-                        color: _cancelArea.pressed ? System.pressOverlay : "transparent"
-                        border.color: System.border
-                        border.width: Theme.borderHairline
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Cancelar"
-                            color: System.textPrimary
-                            font.pixelSize: Theme.fontLabel
-                        }
-                        MouseArea { id: _cancelArea
-                            anchors.fill: parent
-                            onClicked: _prompt.hide()
-                        }
-                    }
-
-                    Rectangle {
-                        id: _connect
-                        width: 110; height: Theme.btnMedium; radius: Theme.radiusM
-                        color: _connectArea.pressed ? System.accentDim : System.accent
-
-                        function activate() {
-                            Settings.network.connectWithPassphrase(_prompt.ssid, _input.text)
-                            _prompt.hide()
-                        }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Conectar"
-                            color: "#000000"
-                            font.pixelSize: Theme.fontLabel
-                            font.weight: Font.Medium
-                        }
-                        MouseArea { id: _connectArea
-                            anchors.fill: parent
-                            onClicked: _connect.activate()
-                        }
-                    }
+                SettingsCard {
+                    title: "Hotspot"
+                    SettingsAction { label: "Em breve" }
                 }
             }
         }
     }
+
+    Component {
+        id: _listView
+        SettingsPageWifiList {
+            onConnectRequested: (n) => root._onNetworkTap(n)
+            onOptionsRequested: (n) => root._onNetworkOptions(n)
+        }
+    }
+
+    // Password input now lives in the global `Keyboard` overlay (Main.qml).
 }

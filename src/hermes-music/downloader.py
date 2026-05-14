@@ -74,8 +74,6 @@ def _ydl_download_opts(out_template: str, progress_hook) -> dict:
     }
     if _COOKIES_FILE.exists():
         opts["cookiefile"] = str(_COOKIES_FILE)
-    else:
-        opts["cookiesfrombrowser"] = ("firefox",)
     return opts
 
 

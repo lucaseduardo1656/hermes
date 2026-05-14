@@ -1,13 +1,14 @@
 [Unit]
 Description=Hermes Music Daemon
-After=network-online.target
+After=network-online.target hermes-music-bootstrap.service
 Wants=network-online.target
+Requires=hermes-music-bootstrap.service
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/usr/share/hermes-music
-ExecStart=/usr/bin/python3 /usr/share/hermes-music/main.py
+ExecStart=/var/lib/hermes-music/venv/bin/python /usr/share/hermes-music/main.py
 Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

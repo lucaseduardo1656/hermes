@@ -214,6 +214,38 @@ Item {
         property string activeTab: "Streaming"
         readonly property bool fullExpanded: root.playerState === "expanded"
 
+        // Track lists shown in the browse area, by priority:
+        //   1. searchResults — non-empty after the user submits a query
+        //   2. Player.queue   — current playback queue
+        //   3. suggestions    — auto-seeded "EM ALTA" list when both empty
+        property var    searchResults: []
+        property var    suggestions:   []
+        property string lastQuery:     ""
+        // Set while we're waiting for the seed query's tracksLoaded to fire,
+        // so we route the result into `suggestions` rather than `searchResults`.
+        property bool _awaitingSeed: false
+
+        Connections {
+            target: Player
+            function onTracksLoaded(tracks, context) {
+                if (context !== "search") return
+                if (_expandedView._awaitingSeed) {
+                    _expandedView.suggestions   = tracks
+                    _expandedView._awaitingSeed = false
+                } else {
+                    _expandedView.searchResults = tracks
+                }
+            }
+        }
+
+        Component.onCompleted: {
+            // Without a connected provider /home is empty; YT Music unauth
+            // search still returns results, so we seed "EM ALTA" with a
+            // generic popular query the first time the player loads.
+            _expandedView._awaitingSeed = true
+            Player.search("musicas mais tocadas", "ytmusic")
+        }
+
         Column {
             anchors {
                 fill: parent
@@ -401,7 +433,7 @@ Item {
                     width:  Theme.searchFieldW
                     height: Theme.btnMedium
                     radius: Theme.radiusM
-                    color:  "transparent"
+                    color:  _searchArea.pressed ? System.pressOverlay : "transparent"
                     border.color: System.border
                     border.width: 1
 
@@ -417,10 +449,30 @@ Item {
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text:  "Anything"
-                            color: System.textMuted
+                            text:  _expandedView.lastQuery !== "" ? _expandedView.lastQuery
+                                                                  : "Buscar música"
+                            color: _expandedView.lastQuery !== "" ? System.textPrimary
+                                                                  : System.textMuted
                             font.pixelSize: Theme.fontLabel
                         }
+                    }
+
+                    MouseArea {
+                        id: _searchArea
+                        anchors.fill: parent
+                        onClicked: Keyboard.show({
+                            title:    "Buscar música",
+                            initial:  _expandedView.lastQuery,
+                            onSubmit: function(q) {
+                                _expandedView.lastQuery = q
+                                if (q.trim() === "") {
+                                    _expandedView.searchResults = []
+                                } else {
+                                    Player.search(q, _expandedView.activeTab === "USB"
+                                                       ? "local" : "all")
+                                }
+                            }
+                        })
                     }
                 }
 
@@ -458,17 +510,42 @@ Item {
                 }
             }
 
-            // ── Browse sections (FAVORITES / TOP STATIONS) ────────────────────
-            BrowseSection {
+            // ── Browse area: results / queue / suggestions ─────────────────────
+            TrackList {
+                id: _browse
                 width: parent.width
                 visible: _expandedView.fullExpanded
-                title: "FAVORITES"
-            }
 
-            BrowseSection {
-                width: parent.width
-                visible: _expandedView.fullExpanded
-                title: "TOP STATIONS"
+                // Mode is decided by what data is available, in priority order.
+                readonly property string mode:
+                    _expandedView.searchResults.length > 0 ? "results"
+                  : Player.queue.length > 0                ? "queue"
+                  : _expandedView.suggestions.length > 0   ? "suggestions"
+                  :                                          "empty"
+
+                heading: mode === "results"     ? "RESULTADOS"
+                       : mode === "queue"       ? "PRÓXIMAS MÚSICAS"
+                       : mode === "suggestions" ? "EM ALTA"
+                       :                          "PESQUISE PARA COMEÇAR"
+
+                tracks: mode === "results"     ? _expandedView.searchResults
+                      : mode === "queue"       ? Player.queue
+                      : mode === "suggestions" ? _expandedView.suggestions
+                      :                          []
+
+                currentIndex: mode === "queue" ? Player.queueIndex : -1
+
+                onTrackTapped: (idx) => {
+                    if (mode === "queue") {
+                        Player.playQueue(Player.queue, idx)
+                    } else {
+                        Player.playQueue(_browse.tracks, idx)
+                        if (mode === "results") {
+                            _expandedView.searchResults = []
+                            _expandedView.lastQuery     = ""
+                        }
+                    }
+                }
             }
         }
     }
@@ -508,43 +585,4 @@ Item {
         MouseArea { id: _ia; anchors.fill: parent; onClicked: parent.tapped() }
     }
 
-    // Heading + horizontal grid of placeholder album covers.
-    component BrowseSection: Column {
-        property string title
-
-        spacing: Theme.spaceM
-
-        Text {
-            width: parent.width
-            text:  title
-            color: System.textPrimary
-            font.pixelSize:    Theme.fontLabel
-            font.weight:       Font.Medium
-            font.letterSpacing: 1
-            horizontalAlignment: Text.AlignHCenter
-        }
-
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: Theme.spaceXL
-
-            Repeater {
-                model: 6
-                delegate: Rectangle {
-                    width:  Theme.playerGridArt
-                    height: Theme.playerGridArt
-                    radius: Theme.radiusM
-                    color:  System.surface2
-                    layer.enabled: true
-
-                    SvgIcon {
-                        anchors.centerIn: parent
-                        source: "qrc:/icons/music-note.svg"
-                        color:  System.textMuted
-                        size:   Theme.iconL
-                    }
-                }
-            }
-        }
-    }
 }

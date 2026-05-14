@@ -31,8 +31,9 @@ def _ydl_opts(extra: dict | None = None) -> dict:
     }
     if _COOKIES_FILE.exists():
         opts["cookiefile"] = str(_COOKIES_FILE)
-    else:
-        opts["cookiesfrombrowser"] = ("firefox",)
+    # No firefox cookie fallback: this runs headless on the Pi where no
+    # browser exists. If a track really needs login cookies, drop a
+    # cookies.txt next to the daemon data dir.
     if extra:
         opts.update(extra)
     return opts

@@ -19,6 +19,9 @@ class SystemController : public QObject {
     Q_PROPERTY(QColor border        READ border        NOTIFY themeChanged)
     Q_PROPERTY(QColor overlay       READ overlay       NOTIFY themeChanged)
     Q_PROPERTY(QColor pressOverlay  READ pressOverlay  CONSTANT)
+    Q_PROPERTY(QColor danger        READ danger        CONSTANT)
+    Q_PROPERTY(QColor success       READ success       CONSTANT)
+    Q_PROPERTY(QColor warning       READ warning       CONSTANT)
 
 public:
     explicit SystemController(QObject *parent = nullptr);
@@ -38,6 +41,9 @@ public:
     QColor border()        const { return m_dark ? QColor("#2E2E2E") : QColor("#DDDDDD"); }
     QColor overlay()       const { return m_dark ? QColor(0, 0, 0, 180) : QColor(0, 0, 0, 80); }
     QColor pressOverlay()  const { return QColor(255, 255, 255, 18); }
+    QColor danger()        const { return QColor("#E5484D"); }
+    QColor success()       const { return QColor("#3DB07F"); }
+    QColor warning()       const { return QColor("#E8B339"); }
 
 signals:
     void themeChanged();

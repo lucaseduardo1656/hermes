@@ -18,6 +18,7 @@ Item {
     property string sublabel:    ""
     property bool   interactive: false
     signal clicked()
+    signal longPressed()
 
     default property alias trailing: _trailing.data
 
@@ -32,6 +33,7 @@ Item {
         anchors.fill: parent
         enabled: root.interactive
         onClicked: root.clicked()
+        onPressAndHold: root.longPressed()
         z: 0
     }
 

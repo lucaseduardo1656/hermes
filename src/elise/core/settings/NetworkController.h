@@ -36,6 +36,8 @@ class NetworkController : public QObject {
     Q_PROPERTY(QString      state            READ state            NOTIFY changed)
     Q_PROPERTY(bool         wifiPowered      READ wifiPowered      NOTIFY changed)
     Q_PROPERTY(QString      currentSsid      READ currentSsid      NOTIFY changed)
+    Q_PROPERTY(QString      connectingSsid   READ connectingSsid   NOTIFY changed)
+    Q_PROPERTY(QString      lastError        READ lastError        NOTIFY changed)
     Q_PROPERTY(QVariantList networks         READ networks         NOTIFY networksChanged)
     Q_PROPERTY(bool         bluetoothPowered READ bluetoothPowered NOTIFY changed)
 
@@ -45,8 +47,13 @@ public:
 
     bool         online()           const { return m_state == QLatin1String("completed"); }
     QString      state()            const { return m_state; }
+    // True when the wlan rfkill switch is unblocked. This is what the UI
+    // toggle binds to, not the wpa_supplicant Interface state (which can
+    // momentarily go "disconnected" mid-roam without the radio being off).
     bool         wifiPowered()      const { return m_wifiPowered; }
     QString      currentSsid()      const { return m_currentSsid; }
+    QString      connectingSsid()   const { return m_connectingSsid; }
+    QString      lastError()        const { return m_lastError; }
     QVariantList networks()         const { return m_networks; }
     bool         bluetoothPowered() const { return false; }
 
@@ -55,6 +62,7 @@ public:
     Q_INVOKABLE void scanWifi();
     Q_INVOKABLE void connectOpen(const QString &ssid);
     Q_INVOKABLE void connectWithPassphrase(const QString &ssid, const QString &psk);
+    Q_INVOKABLE void reconnectSaved(const QString &ssid);
     Q_INVOKABLE void disconnectCurrent();
     Q_INVOKABLE void forgetSsid(const QString &ssid);
 
@@ -78,6 +86,8 @@ private:
     QString m_ifacePath;
     QString m_state;             // "disconnected", "scanning", "associating", "completed"...
     QString m_currentSsid;
+    QString m_connectingSsid;    // SSID currently being attempted; "" when idle
+    QString m_lastError;
     bool    m_wifiPowered = false;
     QVariantList m_networks;
 };

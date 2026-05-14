@@ -38,10 +38,13 @@ SettingsRow {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: {
-                root.checked = !root.checked
-                root.toggled(root.checked)
-            }
+            // Don't write to `checked` here — that would replace the
+            // caller's binding (e.g. `checked: Settings.network.wifiPowered`)
+            // with a static value and desync the toggle from backend state.
+            // Just emit the requested new value; the caller's onToggled is
+            // expected to drive the underlying source-of-truth, which then
+            // propagates back through the binding.
+            onClicked: root.toggled(!root.checked)
         }
     }
 }

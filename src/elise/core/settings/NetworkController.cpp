@@ -3,8 +3,17 @@
 #include <sdbus-c++/sdbus-c++.h>
 
 #include <QDebug>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QMetaObject>
 #include <QVariantMap>
+
+#include <cstring>
+#include <net/if.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace {
 constexpr const char *kService    = "fi.w1.wpa_supplicant1";
@@ -20,6 +29,23 @@ QString ssidFromBytes(const std::vector<uint8_t> &bytes) {
                              static_cast<int>(bytes.size()));
 }
 
+// wpa_supplicant returns the saved-network `ssid` property in whatever
+// type it was stored as: byte array (`ay`) if we added it that way, or
+// a quoted string (`"foo"`) for legacy entries. Normalize both.
+QString ssidFromVariant(const sdbus::Variant &v) {
+    try {
+        auto bytes = v.get<std::vector<uint8_t>>();
+        return ssidFromBytes(bytes);
+    } catch (...) {}
+    try {
+        QString s = QString::fromStdString(v.get<std::string>());
+        if (s.startsWith('"') && s.endsWith('"'))
+            s = s.mid(1, s.size() - 2);
+        return s;
+    } catch (...) {}
+    return {};
+}
+
 // `Variant.get<T>()` throws on type mismatch; these helpers just swallow it
 // and fall back to a default to keep refresh paths from blowing up when
 // wpa_supplicant returns an unexpected type.
@@ -31,6 +57,51 @@ int variantInt(const sdbus::Variant &v) {
         try { return int(v.get<uint16_t>()); } catch (...) { return 0; }
     }
 }
+
+// Locate the rfkill switch for the wireless radio under /sys/class/rfkill.
+// Returns the sysfs directory (e.g. /sys/class/rfkill/rfkill1) whose
+// `type` reads "wlan", or an empty QString if absent.
+QString findWlanRfkill() {
+    QDir base("/sys/class/rfkill");
+    const QStringList entries = base.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const auto &e : entries) {
+        const QString dir = base.filePath(e);
+        QFile typeFile(dir + "/type");
+        if (!typeFile.open(QIODevice::ReadOnly)) continue;
+        const QByteArray type = typeFile.readAll().trimmed();
+        if (type == "wlan") return dir;
+    }
+    return {};
+}
+
+bool readRfkillSoft(const QString &dir) {
+    QFile f(dir + "/soft");
+    if (!f.open(QIODevice::ReadOnly)) return true;   // assume blocked if unreadable
+    return f.readAll().trimmed() == "0";             // soft=0 = unblocked = powered
+}
+
+bool writeRfkillSoft(const QString &dir, bool unblocked) {
+    QFile f(dir + "/soft");
+    if (!f.open(QIODevice::WriteOnly)) return false;
+    return f.write(unblocked ? "0\n" : "1\n") > 0;
+}
+
+// Bring/take down wlan0 via SIOCGIFFLAGS+SIOCSIFFLAGS. Unblocking rfkill
+// alone does not raise IFF_UP — kernel leaves the link in the state it was
+// before the rfkill block. wpa_supplicant then reports State = "interface
+// _disabled" until the link is up.
+bool setIfaceUp(const char *name, bool up) {
+    int sock = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0) return false;
+    struct ifreq ifr{};
+    std::strncpy(ifr.ifr_name, name, IFNAMSIZ - 1);
+    if (::ioctl(sock, SIOCGIFFLAGS, &ifr) < 0) { ::close(sock); return false; }
+    if (up) ifr.ifr_flags |=  IFF_UP;
+    else    ifr.ifr_flags &= ~IFF_UP;
+    const bool ok = ::ioctl(sock, SIOCSIFFLAGS, &ifr) == 0;
+    ::close(sock);
+    return ok;
+}
 }
 
 NetworkController::NetworkController(QObject *parent)
@@ -40,6 +111,12 @@ NetworkController::NetworkController(QObject *parent)
     m_retryTimer.setInterval(3'000);
     QObject::connect(&m_retryTimer, &QTimer::timeout, this,
                      &NetworkController::connect);
+
+    // Seed wifiPowered from rfkill so the toggle reflects the radio state
+    // even before wpa_supplicant tells us anything.
+    const QString rk = findWlanRfkill();
+    if (!rk.isEmpty()) m_wifiPowered = readRfkillSoft(rk);
+
     connect();
 }
 
@@ -135,10 +212,46 @@ void NetworkController::refreshState() {
             }
         } catch (...) { /* no current bss */ }
 
+        // Clear connecting marker once we either finish, fail, or are clearly idle.
+        if (!m_connectingSsid.isEmpty()) {
+            if (s == QLatin1String("completed")) {
+                m_connectingSsid.clear();
+                m_lastError.clear();
+                // Persist the just-connected network to /etc/wpa_supplicant/
+                // so the SSID + psk survive reboots. Requires update_config=1
+                // in the config file (set by our overlay) and a writable
+                // location for the file.
+                try {
+                    m_iface->callMethod("SaveConfig").onInterface(kIfaceIf)
+                           .dontExpectReply();
+                } catch (...) {}
+            } else if (s == QLatin1String("disconnected") ||
+                       s == QLatin1String("inactive") ||
+                       s == QLatin1String("interface_disabled")) {
+                // 4-way handshake failure = wrong PSK. Auto-forget the
+                // saved entry so the next tap re-prompts the user.
+                const bool wrongKey =
+                    m_state == QLatin1String("4way_handshake") ||
+                    m_state == QLatin1String("group_handshake");
+                if (wrongKey) {
+                    m_lastError = QStringLiteral("Senha incorreta em %1").arg(m_connectingSsid);
+                    const QString badSsid = m_connectingSsid;
+                    m_connectingSsid.clear();
+                    QMetaObject::invokeMethod(this, [this, badSsid]{
+                        forgetSsid(badSsid);
+                    }, Qt::QueuedConnection);
+                } else {
+                    m_lastError = QStringLiteral("Falha ao conectar em %1").arg(m_connectingSsid);
+                    m_connectingSsid.clear();
+                }
+            }
+        }
         if (s != m_state || ssid != m_currentSsid || m_wifiPowered != prevPowered) {
             m_state       = s;
             m_currentSsid = ssid;
             emit changed();
+        } else {
+            emit changed();   // connectingSsid may have changed
         }
     } catch (const sdbus::Error &e) {
         qWarning() << "NetworkController: refreshState:" << e.getMessage().c_str();
@@ -165,11 +278,8 @@ void NetworkController::rebuildNetworks() {
                                   .get<std::map<std::string, sdbus::Variant>>();
                     auto it = props.find("ssid");
                     if (it != props.end()) {
-                        QString s = variantStr(it->second);
-                        // wpa_supplicant returns ssid wrapped in quotes
-                        if (s.startsWith('"') && s.endsWith('"'))
-                            s = s.mid(1, s.size() - 2);
-                        saved.insert(s);
+                        QString s = ssidFromVariant(it->second);
+                        if (!s.isEmpty()) saved.insert(s);
                     }
                 } catch (...) {}
             }
@@ -257,10 +367,8 @@ QString NetworkController::findSavedNetworkPath(const QString &ssid) const {
                               .get<std::map<std::string, sdbus::Variant>>();
                 auto it = props.find("ssid");
                 if (it != props.end()) {
-                    QString s = variantStr(it->second);
-                    if (s.startsWith('"') && s.endsWith('"'))
-                        s = s.mid(1, s.size() - 2);
-                    if (s == ssid) return QString::fromStdString(np);
+                    if (ssidFromVariant(it->second) == ssid)
+                        return QString::fromStdString(np);
                 }
             } catch (...) {}
         }
@@ -271,13 +379,32 @@ QString NetworkController::findSavedNetworkPath(const QString &ssid) const {
 QString NetworkController::addNetwork(const QString &ssid, const QString &psk) {
     if (!m_iface) return {};
     std::map<std::string, sdbus::Variant> args;
-    // wpa_supplicant expects ssid quoted, raw inside Variant string.
-    args["ssid"] = sdbus::Variant{std::string{"\""} + ssid.toStdString() + "\""};
+    // Pass SSID as a byte array (`ay`). If we pass it as a string variant
+    // wpa_supplicant re-quotes it on store, ending up with `""SSID""` and
+    // no matching AP. The byte-array form is stored verbatim.
+    const QByteArray ssidUtf8 = ssid.toUtf8();
+    std::vector<uint8_t> ssidBytes(ssidUtf8.begin(), ssidUtf8.end());
+    args["ssid"] = sdbus::Variant{ssidBytes};
     if (psk.isEmpty()) {
         args["key_mgmt"] = sdbus::Variant{std::string{"NONE"}};
     } else {
-        args["psk"]      = sdbus::Variant{std::string{"\""} + psk.toStdString() + "\""};
+        // psk is passed UNQUOTED via D-Bus. Quotes around the passphrase
+        // are only the wpa_supplicant.conf-file syntax. wpa_supplicant's
+        // D-Bus AddNetwork treats <=63-char value as passphrase, exactly
+        // 64-hex as raw PSK. Quoting it yields a wrong passphrase that
+        // fails the 4-way handshake.
+        args["psk"]      = sdbus::Variant{psk.toStdString()};
         args["key_mgmt"] = sdbus::Variant{std::string{"WPA-PSK"}};
+        args["ieee80211w"] = sdbus::Variant{uint32_t{0}};   // PMF off
+        // Narrow profile validated against mixed WPA/WPA2 APs with TKIP
+        // group cipher. brcmfmac on Pi 5 fails some 5 GHz channels at
+        // scan time (cfg80211 BR regdom) which corrupts driver state
+        // mid-attempt; restrict to 2.4 GHz so scan + assoc stay clean.
+        args["proto"]      = sdbus::Variant{std::string{"RSN"}};
+        args["pairwise"]   = sdbus::Variant{std::string{"CCMP"}};
+        args["group"]      = sdbus::Variant{std::string{"CCMP TKIP"}};
+        args["freq_list"]  = sdbus::Variant{std::string{
+            "2412 2417 2422 2427 2432 2437 2442 2447 2452 2457 2462"}};
     }
 
     sdbus::ObjectPath path;
@@ -304,12 +431,32 @@ void NetworkController::selectNetworkPath(const QString &path) {
 
 // ── Mutators ────────────────────────────────────────────────────────────────
 
-void NetworkController::setWifiPowered(bool /*on*/) {
-    // wpa_supplicant has no direct "power" toggle. The interface stays
-    // active once registered; toggling it cleanly would mean removing the
-    // interface object, which also drops scan results. We treat the flag
-    // as read-only for now and surface true while the iface object exists.
-    // TODO: rfkill block/unblock for a real off-switch.
+void NetworkController::setWifiPowered(bool on) {
+    const QString rk = findWlanRfkill();
+    if (rk.isEmpty()) {
+        emit errorOccurred(QStringLiteral("rfkill: no wlan switch found"));
+        return;
+    }
+    if (!writeRfkillSoft(rk, on)) {
+        emit errorOccurred(QStringLiteral("rfkill: write failed (run as root)"));
+        return;
+    }
+
+    // Unblocking rfkill leaves wlan0 in the link-down state it was forced
+    // into; bring it back up so wpa_supplicant can leave "interface_disabled".
+    // On power-off we drop the link first, then block rfkill.
+    if (on) {
+        setIfaceUp("wlan0", true);
+    } else {
+        setIfaceUp("wlan0", false);
+    }
+
+    m_wifiPowered = on;
+    emit changed();
+    if (on) {
+        // Give the radio a moment to come up before kicking a scan.
+        QTimer::singleShot(800, this, &NetworkController::scanWifi);
+    }
 }
 
 void NetworkController::scanWifi() {
@@ -325,13 +472,24 @@ void NetworkController::scanWifi() {
 }
 
 void NetworkController::connectOpen(const QString &ssid) {
+    if (!m_iface) return;
+    m_connectingSsid = ssid;
+    m_lastError.clear();
+    emit changed();
+    // Reuse a previously saved entry for this SSID when present — avoids
+    // accumulating duplicates and lets wpa_supplicant pick a faster path.
     QString path = findSavedNetworkPath(ssid);
     if (path.isEmpty()) path = addNetwork(ssid, {});
     selectNetworkPath(path);
 }
 
 void NetworkController::connectWithPassphrase(const QString &ssid, const QString &psk) {
-    // If we already saved this SSID, drop it so the new PSK takes effect.
+    if (!m_iface) return;
+    m_connectingSsid = ssid;
+    m_lastError.clear();
+    emit changed();
+    // User just typed a (possibly new) password — replace any prior entry
+    // for this SSID so the fresh psk wins, then SelectNetwork.
     QString existing = findSavedNetworkPath(ssid);
     if (!existing.isEmpty()) {
         try {
@@ -341,6 +499,19 @@ void NetworkController::connectWithPassphrase(const QString &ssid, const QString
         } catch (...) {}
     }
     QString path = addNetwork(ssid, psk);
+    selectNetworkPath(path);
+}
+
+void NetworkController::reconnectSaved(const QString &ssid) {
+    if (!m_iface) return;
+    QString path = findSavedNetworkPath(ssid);
+    if (path.isEmpty()) {
+        emit errorOccurred(QStringLiteral("Rede %1 não está salva").arg(ssid));
+        return;
+    }
+    m_connectingSsid = ssid;
+    m_lastError.clear();
+    emit changed();
     selectNetworkPath(path);
 }
 

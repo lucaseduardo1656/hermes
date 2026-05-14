@@ -13,7 +13,9 @@ SettingsRow {
 
     interactive: true
     signal triggered()
+    signal heldLong()
     onClicked: root.triggered()
+    onLongPressed: root.heldLong()
 
     SvgIcon {
         anchors.verticalCenter: parent.verticalCenter

@@ -69,6 +69,13 @@ if [ -d "${CYPRESS_FW}" ] && [ -f "${CYPRESS_FW}/cyfmac43455-sdio.bin" ]; then
     fi
 fi
 
+# Remove stale unit files left in /etc/systemd/system by previous overlay
+# generations. Authoritative units now live under /usr/lib/systemd/system/
+# (installed by their respective packages). Buildroot's incremental rootfs
+# build does not garbage-collect files removed from the overlay, so we do
+# it here explicitly to avoid the old file shadowing the package version.
+rm -f "${SYSTEMD_DIR}/hermes-music.service"
+
 # Não bloquear boot esperando rede
 ln -sf /dev/null \
     "${SYSTEMD_DIR}/network-online.target.wants/systemd-networkd-wait-online.service" 2>/dev/null || true
