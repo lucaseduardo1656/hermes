@@ -28,6 +28,8 @@ class BluetoothController : public QObject {
 
     Q_PROPERTY(bool         powered          READ powered          NOTIFY changed)
     Q_PROPERTY(bool         discovering      READ discovering      NOTIFY changed)
+    Q_PROPERTY(bool         discoverable     READ discoverable     NOTIFY changed)
+    Q_PROPERTY(QString      adapterAlias     READ adapterAlias     NOTIFY changed)
     Q_PROPERTY(QString      connectedAlias   READ connectedAlias   NOTIFY changed)
     Q_PROPERTY(QString      connectingAddr   READ connectingAddr   NOTIFY changed)
     Q_PROPERTY(QString      lastError        READ lastError        NOTIFY changed)
@@ -39,12 +41,16 @@ public:
 
     bool         powered()        const { return m_powered; }
     bool         discovering()    const { return m_discovering; }
+    bool         discoverable()   const { return m_discoverable; }
+    QString      adapterAlias()   const { return m_adapterAlias; }
     QString      connectedAlias() const { return m_connectedAlias; }
     QString      connectingAddr() const { return m_connectingAddr; }
     QString      lastError()      const { return m_lastError; }
     QVariantList devices()        const { return m_devices; }
 
     Q_INVOKABLE void setPowered(bool on);
+    Q_INVOKABLE void setDiscoverable(bool on);
+    Q_INVOKABLE void setAdapterAlias(const QString &alias);
     Q_INVOKABLE void startScan();
     Q_INVOKABLE void stopScan();
     Q_INVOKABLE void pair(const QString &address);
@@ -79,6 +85,8 @@ private:
     QTimer       m_retryTimer;
     bool         m_powered        = false;
     bool         m_discovering    = false;
+    bool         m_discoverable   = false;
+    QString      m_adapterAlias;
     QString      m_connectedAlias;
     QString      m_connectingAddr;
     QString      m_lastError;

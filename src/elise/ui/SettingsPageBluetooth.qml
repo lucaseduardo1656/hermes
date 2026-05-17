@@ -160,6 +160,24 @@ Item {
                         }
                     }
                 }
+
+                // Phase 2 surface: lets the user pair *from the phone*. When
+                // the toggle is on the adapter accepts incoming pairings and
+                // shows up in the phone's BT scanner under `adapterAlias`.
+                SettingsCard {
+                    title: "Modo receptor"
+
+                    SettingsToggle {
+                        label: "Visível para outros dispositivos"
+                        checked: Settings.bluetooth.discoverable
+                        enabled: Settings.bluetooth.powered
+                        onToggled: (v) => Settings.bluetooth.setDiscoverable(v)
+                    }
+                    SettingsAction {
+                        label: "Nome do veículo"
+                        sublabel: Settings.bluetooth.adapterAlias || "—"
+                    }
+                }
             }
         }
     }

@@ -170,10 +170,24 @@ void BluetoothController::refreshAdapterState() {
                                 .onInterface(kAdapterIf).get<bool>();
         const bool discovering = m_adapter->getProperty("Discovering")
                                     .onInterface(kAdapterIf).get<bool>();
-        bool changed = (powered != m_powered) || (discovering != m_discovering);
+        const bool discoverable = m_adapter->getProperty("Discoverable")
+                                    .onInterface(kAdapterIf).get<bool>();
+        QString alias;
+        try {
+            alias = QString::fromStdString(
+                m_adapter->getProperty("Alias").onInterface(kAdapterIf)
+                         .get<std::string>());
+        } catch (...) {}
+
+        bool changed = (powered != m_powered)
+                    || (discovering != m_discovering)
+                    || (discoverable != m_discoverable)
+                    || (alias != m_adapterAlias);
         const bool wasPowered = m_powered;
         m_powered = powered;
         m_discovering = discovering;
+        m_discoverable = discoverable;
+        m_adapterAlias = alias;
 
         // On adapter coming up for the first time this session, kick a
         // best-effort reconnect to every trusted device. The bus call is
@@ -331,6 +345,32 @@ void BluetoothController::setPowered(bool on) {
     try {
         m_adapter->setProperty("Powered").onInterface(kAdapterIf)
                  .toValue(on);
+    } catch (const sdbus::Error &e) {
+        emit errorOccurred(QString::fromStdString(e.getMessage()));
+    }
+}
+
+void BluetoothController::setDiscoverable(bool on) {
+    if (!m_adapter) return;
+    try {
+        // Persistent visibility — DiscoverableTimeout=0 keeps the
+        // adapter discoverable until explicitly turned off. The car
+        // is a stationary endpoint; leaving it visible while parked is
+        // the expected UX for "pair my phone".
+        m_adapter->setProperty("DiscoverableTimeout").onInterface(kAdapterIf)
+                 .toValue(uint32_t{0});
+        m_adapter->setProperty("Discoverable").onInterface(kAdapterIf)
+                 .toValue(on);
+    } catch (const sdbus::Error &e) {
+        emit errorOccurred(QString::fromStdString(e.getMessage()));
+    }
+}
+
+void BluetoothController::setAdapterAlias(const QString &alias) {
+    if (!m_adapter || alias.isEmpty()) return;
+    try {
+        m_adapter->setProperty("Alias").onInterface(kAdapterIf)
+                 .toValue(alias.toStdString());
     } catch (const sdbus::Error &e) {
         emit errorOccurred(QString::fromStdString(e.getMessage()));
     }
