@@ -14,12 +14,15 @@ Item {
 
     Rectangle {
         id: card
+        // Card style — same fixed width as the search bar so the two
+        // top-anchored chips visually align. Height grows with the
+        // instruction text when it wraps.
         anchors {
-            top:    parent.top;  topMargin:   Theme.spaceM
-            left:   parent.left; leftMargin:  Theme.spaceL
-            right:  parent.right; rightMargin: Theme.spaceL
+            top:  parent.top; topMargin:  Theme.spaceM
+            left: parent.left; leftMargin: Theme.spaceL
         }
-        height: Theme.navCardH
+        width:  320
+        height: Math.max(Theme.navCardH, _row.implicitHeight + Theme.spaceL)
         radius: Theme.radiusL
         color:  System.surface
 
@@ -33,17 +36,20 @@ Item {
         }
 
         Row {
-            anchors { fill: parent; leftMargin: Theme.spaceL; rightMargin: Theme.spaceL }
-            spacing: Theme.spaceL
+            id: _row
+            anchors {
+                left: parent.left; right: parent.right
+                verticalCenter: parent.verticalCenter
+                leftMargin: Theme.spaceM; rightMargin: Theme.spaceM
+            }
+            spacing: Theme.spaceM
 
-            // Direction badge
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 width:  Theme.navBadge
                 height: Theme.navBadge
                 radius: Theme.radiusM
                 color:  Qt.rgba(System.accent.r, System.accent.g, System.accent.b, 0.15)
-
                 SvgIcon {
                     anchors.centerIn: parent
                     source: root.direction === "left"  ? "qrc:/icons/arrow-left.svg"
@@ -54,9 +60,9 @@ Item {
                 }
             }
 
-            // Instruction + distance
             Column {
                 anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - Theme.navBadge - Theme.spaceM
                 spacing: 3
 
                 Text {
@@ -64,8 +70,10 @@ Item {
                     color: System.textPrimary
                     font.pixelSize: Theme.fontBody
                     font.weight:    Font.Medium
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: 3
                     elide: Text.ElideRight
-                    width: card.width - 100
                 }
                 Text {
                     text:  root.distance

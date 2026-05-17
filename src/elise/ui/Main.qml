@@ -46,11 +46,14 @@ Window {
 
     // ── Map search bar ───────────────────────────────────────────────────────
     // Fixed pixel width so the bar feels like a chip floating over the
-    // map instead of a long header — Tesla / Apple Maps style.
+    // map instead of a long header — Tesla / Apple Maps style. Drops
+    // below the navigation banner when an active route is running so
+    // the two top-left chips stack instead of overlapping.
     MapSearchBar {
         id: _mapSearch
         anchors {
-            top:  parent.top;  topMargin:  Theme.spaceL
+            top:  Nav.active ? _navOverlay.bottom : parent.top
+            topMargin:  Nav.active ? Theme.spaceS : Theme.spaceL
             left: parent.left; leftMargin: Theme.spaceL
         }
         width: 320
@@ -166,6 +169,7 @@ Window {
 
     // ── Navigation overlay ───────────────────────────────────────────────────
     NavigationOverlay {
+        id: _navOverlay
         anchors { top: parent.top; left: parent.left; right: parent.right }
         height: Theme.navOverlayH
         z: 800

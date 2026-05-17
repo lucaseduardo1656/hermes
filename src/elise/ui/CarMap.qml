@@ -35,10 +35,20 @@ Item {
     }
 
     function setDestination(coord) {
+        // Snapshot the current view as the route origin BEFORE the
+        // destination triggers a viewport fit — otherwise the next
+        // route query uses the destination as both endpoints (no
+        // real GPS yet) and OSRM rejects start==end.
+        _routeOrigin = _pos.position.coordinate.isValid
+                         ? _pos.position.coordinate
+                         : _map.center
         destination = coord
-        if (coord && coord.isValid)
-            _map.center = coord
     }
+
+    // The point we use as "where the car is" for routing. Real GPS
+    // when valid, else the map centre at the moment a destination is
+    // chosen (so the user can pan to where they are before searching).
+    property var _routeOrigin: null
 
     function clearDestination() {
         destination = null
@@ -88,10 +98,10 @@ Item {
                           value: "https://tile.openstreetmap.org/" }
         PluginParameter { name: "osm.mapping.highdpi_tiles"
                           value: "true" }
-        PluginParameter { name: "osm.routing.host"
-                          value: "https://router.project-osrm.org/route/v1/" }
-        PluginParameter { name: "osm.geocoding.host"
-                          value: "https://nominatim.openstreetmap.org/" }
+        // Routing + geocoding hosts left as Qt's defaults (OSRM demo +
+        // Nominatim). Overriding `osm.routing.host` clobbers the
+        // `route/v1/<profile>/` path that the plugin appends, so the
+        // resulting URL hits the OSRM root and 400s silently.
     }
 
     // ── Geocoding ────────────────────────────────────────────────────────────
@@ -149,7 +159,13 @@ Item {
             if (!root.hasDestination) return
             const here = _pos.position.coordinate.isValid
                            ? _pos.position.coordinate
-                           : _map.center
+                           : (_routeOrigin || _map.center)
+            if (here.latitude === root.destination.latitude
+                && here.longitude === root.destination.longitude) {
+                // Routing demands distinct start/end. Skip — the user
+                // hasn't moved away from the destination yet.
+                return
+            }
             _routeQuery.clearWaypoints()
             _routeQuery.addWaypoint(here)
             _routeQuery.addWaypoint(root.destination)
@@ -170,7 +186,33 @@ Item {
 
     Connections {
         target: _routes
-        function onCountChanged() { _recomputeManeuver() }
+        function onCountChanged() {
+            if (_routes.count > 0) {
+                const r = _routes.get(0)
+                if (r && r.path && r.path.length > 0)
+                    _fitRouteToViewport(r.path)
+            }
+            _recomputeManeuver()
+        }
+    }
+
+    // Frame the whole route polyline in the viewport. We do the
+    // bounding box math by hand because QtPositioning.shapeToRectangle
+    // wraps a GeoPath into a too-tight rectangle on some Qt 6 builds
+    // and fitViewportToGeoShape ends up centring on a single endpoint.
+    function _fitRouteToViewport(path) {
+        let minLat =  90, maxLat = -90, minLon =  180, maxLon = -180
+        for (let i = 0; i < path.length; ++i) {
+            const c = path[i]
+            if (c.latitude  < minLat) minLat = c.latitude
+            if (c.latitude  > maxLat) maxLat = c.latitude
+            if (c.longitude < minLon) minLon = c.longitude
+            if (c.longitude > maxLon) maxLon = c.longitude
+        }
+        const rect = QtPositioning.rectangle(
+            QtPositioning.coordinate(maxLat, minLon),
+            QtPositioning.coordinate(minLat, maxLon))
+        _map.fitViewportToGeoShape(rect, 80)
     }
 
     // ── Turn-by-turn maneuver tracking ───────────────────────────────────────
