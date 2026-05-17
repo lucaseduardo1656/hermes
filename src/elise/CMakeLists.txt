@@ -31,6 +31,8 @@ qt_add_executable(elise
     core/settings/SystemInfoController.cpp
     core/settings/NetworkController.h
     core/settings/NetworkController.cpp
+    core/settings/BluetoothController.h
+    core/settings/BluetoothController.cpp
 )
 
 set_source_files_properties(ui/Theme.qml PROPERTIES
@@ -69,12 +71,15 @@ qt_add_qml_module(elise
         ui/SettingsPageVeiculo.qml
         ui/SettingsPageConectividade.qml
         ui/SettingsPageWifiList.qml
+        ui/SettingsPageBluetooth.qml
+        ui/SettingsPageBluetoothList.qml
         ui/SoftKeyboard.qml
         ui/KeyboardKey.qml
         ui/Keyboard.qml
         ui/ActionSheet.qml
         ui/ActionSheetView.qml
         ui/TrackList.qml
+        ui/TrackCarousel.qml
         ui/SettingsPageInterface.qml
         ui/SettingsPageSom.qml
         ui/SettingsPageSistema.qml
@@ -100,6 +105,7 @@ qt_add_resources(elise "elise_icons"
         icons/arrow-right.svg
         icons/music-note.svg
         icons/heart.svg
+        icons/refresh.svg
         icons/download.svg
         icons/settings.svg
         icons/user.svg

@@ -1,0 +1,9 @@
+config BR2_PACKAGE_PYTHON_SPOTIPY
+	bool "python-spotipy"
+	select BR2_PACKAGE_PYTHON_REDIS
+	select BR2_PACKAGE_PYTHON_REQUESTS
+	help
+	  Lightweight Python client for the Spotify Web API. Used by
+	  hermes-music when a Spotify account is connected.
+
+	  https://github.com/spotipy-dev/spotipy

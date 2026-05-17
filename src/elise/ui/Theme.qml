@@ -56,6 +56,7 @@ QtObject {
     readonly property int playerCollapsedArt: 40     // thumbnail in collapsed bar
     readonly property int playerExpandedArt:  76     // artwork in expanded view
     readonly property int playerGridArt:      110    // grid item size
+    readonly property int carouselCardW:      140    // home-feed card width
 
     // ── Gestures ──────────────────────────────────────────────────────────────
     readonly property int dragSnapVelocity:  600     // px/s to trigger fast snap

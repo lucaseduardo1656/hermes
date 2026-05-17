@@ -247,50 +247,173 @@ async def sc_playlist(url: str = Query(...)):
 
 # ── Home page ────────────────────────────────────────────────────────────────
 
-@router.get("/home")
-async def home():
-    """
-    Unified home page for the Qt MusicView.
-    Returns sections: recents, playlists, recommendations, top tracks.
-    All providers merged — UI doesn't need to know the source.
-    Sections with no data are omitted so Qt renders only what's available.
-    """
-    import asyncio
+# Home feed cache.
+#
+# `sections` is grown lazily for infinite scroll: initial fill loads
+# recents + charts + YT Music's home rows. Once the client paginates past
+# what's there, we extend the list one mood-category section at a time
+# (Chill, Energize, Party, Sad, …) until YT Music's mood catalog is
+# exhausted. Each section is a real upstream feed, never a hardcoded
+# title or track list.
+_HOME_CACHE: dict = {
+    "sections":      [],
+    "fetched_at":    0.0,
+    "moods":         None,   # list[{title, params}] — None until loaded
+    "moods_cursor":  0,      # next mood index to expand into a section
+}
+_HOME_TTL_SECS = 600   # 10 min
 
-    # Fire all requests in parallel
+
+async def _build_home_sections() -> list[dict]:
+    import asyncio
     tasks = {
         "recents":         asyncio.create_task(_safe(lambda: hist.recent(10))),
+        "charts":          asyncio.create_task(_safe(lambda: ytmusic.get_charts_tracks("BR", 20))),
+        "yt_sections":     asyncio.create_task(_safe(lambda: ytmusic.get_home_sections(12))),
         "playlists":       asyncio.create_task(_safe(_all_playlists)),
         "recommendations": asyncio.create_task(_safe(_all_recommendations)),
         "top_tracks":      asyncio.create_task(_safe(_top_tracks)),
         "liked":           asyncio.create_task(_safe(_all_liked)),
     }
-
     results = {k: await v for k, v in tasks.items()}
 
-    sections = []
-
+    out: list[dict] = []
     if results["recents"]:
-        sections.append({"id": "recents", "title": "Tocadas recentemente",
-                         "type": "tracks", "items": results["recents"]})
-
+        out.append({"id": "recents", "title": "Tocadas recentemente",
+                    "type": "tracks", "items": results["recents"]})
+    if results["charts"]:
+        out.append({"id": "charts", "title": "Em alta no Brasil",
+                    "type": "tracks", "items": results["charts"]})
+    # Pass YT Music's home rows through verbatim.
+    for i, s in enumerate(results["yt_sections"] or []):
+        out.append({
+            "id":    f"yt_{i}",
+            "title": s.get("title") or "Pra você",
+            "type":  "tracks",
+            "items": s.get("items") or [],
+        })
     if results["playlists"]:
-        sections.append({"id": "playlists", "title": "Suas playlists",
-                         "type": "playlists", "items": results["playlists"]})
-
+        out.append({"id": "playlists", "title": "Suas playlists",
+                    "type": "playlists", "items": results["playlists"]})
     if results["recommendations"]:
-        sections.append({"id": "recommendations", "title": "Recomendado pra você",
-                         "type": "tracks", "items": results["recommendations"]})
-
+        out.append({"id": "recommendations", "title": "Recomendado pra você",
+                    "type": "tracks", "items": results["recommendations"]})
     if results["top_tracks"]:
-        sections.append({"id": "top_tracks", "title": "Suas mais tocadas",
-                         "type": "tracks", "items": results["top_tracks"]})
-
+        out.append({"id": "top_tracks", "title": "Suas mais tocadas",
+                    "type": "tracks", "items": results["top_tracks"]})
     if results["liked"]:
-        sections.append({"id": "liked", "title": "Músicas curtidas",
-                         "type": "tracks", "items": results["liked"]})
+        out.append({"id": "liked", "title": "Músicas curtidas",
+                    "type": "tracks", "items": results["liked"]})
+    return out
 
-    return {"sections": sections}
+
+async def _extend_home_with_mood() -> bool:
+    """
+    Append one more section to `_HOME_CACHE` by expanding the next mood
+    category from YT Music. Returns True if a section was added, False
+    once the mood catalog is exhausted.
+    """
+    if _HOME_CACHE["moods"] is None:
+        _HOME_CACHE["moods"] = await _safe(ytmusic.get_mood_catalog) or []
+    moods   = _HOME_CACHE["moods"]
+    cursor  = _HOME_CACHE["moods_cursor"]
+    if cursor >= len(moods):
+        return False
+
+    mood   = moods[cursor]
+    _HOME_CACHE["moods_cursor"] = cursor + 1
+    tracks = await _safe(lambda: ytmusic.get_mood_section(mood["params"], 12)) or []
+    if not tracks:
+        return await _extend_home_with_mood()   # skip empty, try next
+
+    _HOME_CACHE["sections"].append({
+        "id":    f"mood_{cursor}",
+        "title": mood["title"],
+        "type":  "tracks",
+        "items": tracks,
+    })
+    return True
+
+
+@router.get("/home")
+async def home(offset: int = 0, limit: int = 4):
+    """
+    Paginated home feed for infinite scroll. Initial pages serve cached
+    YT Music home rows + charts + history; further pages grow the cache
+    on-demand by expanding mood categories. The whole cache is rebuilt
+    after `_HOME_TTL_SECS`.
+    """
+    import time
+    now = time.time()
+
+    # Cold start or cache expired — rebuild from scratch.
+    # If the build returns nothing, or only the local "recents" section
+    # (network/TLS not ready yet at boot, YT Music calls all failed),
+    # we deliberately leave `fetched_at` at zero so the next request
+    # retries instead of caching the degraded result for the TTL.
+    if not _HOME_CACHE["sections"] or (now - _HOME_CACHE["fetched_at"]) > _HOME_TTL_SECS:
+        built = await _build_home_sections()
+        non_local = [s for s in built if s["id"] != "recents"]
+        if non_local:
+            _HOME_CACHE["sections"]     = built
+            _HOME_CACHE["fetched_at"]   = now
+            _HOME_CACHE["moods"]        = None
+            _HOME_CACHE["moods_cursor"] = 0
+        elif built and not _HOME_CACHE["sections"]:
+            # Serve recents-only this request without poisoning the cache.
+            return {"sections": built, "offset": 0, "limit": limit,
+                    "total": len(built), "has_more": False}
+
+    offset = max(0, offset)
+    limit  = max(1, min(limit, 50))
+
+    # Lazily extend until we can satisfy `offset + limit`, or until the
+    # mood catalog runs out (whichever comes first).
+    while len(_HOME_CACHE["sections"]) < offset + limit:
+        if not await _extend_home_with_mood():
+            break
+
+    cached = _HOME_CACHE["sections"]
+    total  = len(cached)
+    slice_ = cached[offset:offset + limit]
+
+    # has_more = either we still have unread cached sections, or the
+    # mood catalog still has unconsumed entries we can lazy-load next.
+    cursor_left = (_HOME_CACHE["moods"] is not None
+                   and _HOME_CACHE["moods_cursor"] < len(_HOME_CACHE["moods"] or []))
+    return {
+        "sections": slice_,
+        "offset":   offset,
+        "limit":    limit,
+        "total":    total,
+        "has_more": (offset + limit < total) or cursor_left,
+    }
+
+
+async def warm_home_cache(initial_delay: float = 2.0,
+                          retry_delay:   float = 15.0) -> None:
+    """
+    Background task: keep rebuilding the home feed until it actually
+    contains YT Music data (not just local recents). Once that lands,
+    swap it into `_HOME_CACHE` atomically. Subsequent /home requests
+    then serve a healthy cache from the very first call.
+    """
+    import asyncio
+    import time
+    await asyncio.sleep(initial_delay)
+    while True:
+        try:
+            built = await _build_home_sections()
+            non_local = [s for s in built if s["id"] != "recents"]
+            if non_local:
+                _HOME_CACHE["sections"]     = built
+                _HOME_CACHE["fetched_at"]   = time.time()
+                _HOME_CACHE["moods"]        = None
+                _HOME_CACHE["moods_cursor"] = 0
+                return
+        except Exception:
+            pass
+        await asyncio.sleep(retry_delay)
 
 
 async def _safe(fn):

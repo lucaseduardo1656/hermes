@@ -58,6 +58,13 @@ Item {
     DragHandler {
         id: _drag
         target: null
+        // When the card is fully expanded, the browse feed below uses a
+        // Flickable for vertical scroll. A card-wide DragHandler would
+        // grab those gestures first and collapse the card instead of
+        // scrolling. Disable the drag in expanded state — users still
+        // close via the chevron-down button or by dragging from the
+        // collapsed/half states.
+        enabled: root.playerState !== "expanded"
         yAxis.enabled: true
         xAxis.enabled: false
 
@@ -214,37 +221,31 @@ Item {
         property string activeTab: "Streaming"
         readonly property bool fullExpanded: root.playerState === "expanded"
 
-        // Track lists shown in the browse area, by priority:
-        //   1. searchResults — non-empty after the user submits a query
-        //   2. Player.queue   — current playback queue
-        //   3. suggestions    — auto-seeded "EM ALTA" list when both empty
+        // Browse-area state.
+        //   searchResults — non-empty after the user submits a query;
+        //                   when populated, it replaces the section grid.
+        //   homeSections  — list of {id, title, type, items} from /home.
         property var    searchResults: []
-        property var    suggestions:   []
+        property var    homeSections:  []
         property string lastQuery:     ""
-        // Set while we're waiting for the seed query's tracksLoaded to fire,
-        // so we route the result into `suggestions` rather than `searchResults`.
-        property bool _awaitingSeed: false
 
         Connections {
             target: Player
             function onTracksLoaded(tracks, context) {
-                if (context !== "search") return
-                if (_expandedView._awaitingSeed) {
-                    _expandedView.suggestions   = tracks
-                    _expandedView._awaitingSeed = false
-                } else {
+                if (context === "search")
                     _expandedView.searchResults = tracks
-                }
+            }
+            function onHomeLoaded(sections, replace) {
+                if (replace)
+                    _expandedView.homeSections = sections
+                else
+                    _expandedView.homeSections = _expandedView.homeSections.concat(sections)
             }
         }
 
-        Component.onCompleted: {
-            // Without a connected provider /home is empty; YT Music unauth
-            // search still returns results, so we seed "EM ALTA" with a
-            // generic popular query the first time the player loads.
-            _expandedView._awaitingSeed = true
-            Player.search("musicas mais tocadas", "ytmusic")
-        }
+        // Kick off the daemon /home request once; sections will populate
+        // asynchronously via onHomeLoaded.
+        Component.onCompleted: Player.loadHome()
 
         Column {
             anchors {
@@ -258,6 +259,7 @@ Item {
 
             // ── Top row: artwork + info + transport controls ──────────────────
             Item {
+                id: _expTopRow
                 width: parent.width
                 height: Theme.playerExpandedArt
 
@@ -272,6 +274,43 @@ Item {
                     }
                     enabled:  root.playerState === "half"
                     onClicked: root.stateChangeRequested("expanded")
+                }
+
+                // Swipe-down-to-close gesture, scoped to the top row only
+                // (artwork + info). The card-wide DragHandler is disabled
+                // when expanded so the Flickable below can scroll; this
+                // localised handler restores the familiar "drag from the
+                // top to collapse" gesture without stealing scroll input
+                // from the section feed.
+                DragHandler {
+                    id: _expDrag
+                    target: null
+                    enabled: root.playerState === "expanded"
+                    yAxis.enabled: true
+                    xAxis.enabled: false
+
+                    property real _startH: 0
+
+                    onActiveChanged: {
+                        if (active) {
+                            _startH = root.height
+                            root._liveH = root.height
+                            root._dragging = true
+                        } else {
+                            root._dragging = false
+                            const frac = root._liveH / root.expandedH
+                            const snap = frac < 0.28 ? "collapsed"
+                                       : frac < 0.72 ? "half"
+                                       :               "expanded"
+                            root._snapH = root._stateToH(snap)
+                            root.stateChangeRequested(snap)
+                        }
+                    }
+
+                    onTranslationChanged: {
+                        root._liveH = Math.max(root.collapsedH,
+                                      Math.min(root.expandedH, _startH - translation.y))
+                    }
                 }
 
                 // Artwork
@@ -337,6 +376,16 @@ Item {
                         icon: "qrc:/icons/heart.svg"
                         size: Theme.iconS
                         // TODO: wire to Player.toggleFavorite() once exposed
+                    }
+                    // Manual refresh — re-fetches the home feed from the
+                    // daemon. Always visible (not gated on empty state)
+                    // so the user can recover from a stale or partial
+                    // cache without restarting anything.
+                    IconBtn {
+                        icon: "qrc:/icons/refresh.svg"
+                        size: Theme.iconS
+                        visible: _expandedView.fullExpanded
+                        onTapped: Player.loadHome()
                     }
                     IconBtn {
                         icon: "qrc:/icons/chevron-down.svg"
@@ -510,39 +559,123 @@ Item {
                 }
             }
 
-            // ── Browse area: results / queue / suggestions ─────────────────────
-            TrackList {
-                id: _browse
-                width: parent.width
+            // ── Browse area ──────────────────────────────────────────────────
+            //
+            // When the user has an active search, we show a flat vertical
+            // list (TrackList). Otherwise we render the home feed: a
+            // "Próximas músicas" carousel built from Player.queue, followed
+            // by one carousel per /home section. The whole thing is in a
+            // Flickable so the user can scroll vertically through sections.
+            Item {
+                id: _browseArea
+                width:   parent.width
+                height: _expandedView.fullExpanded
+                          ? (parent.height - y - Theme.spaceXXL)
+                          : 0
                 visible: _expandedView.fullExpanded
+                clip:    true
 
-                // Mode is decided by what data is available, in priority order.
-                readonly property string mode:
-                    _expandedView.searchResults.length > 0 ? "results"
-                  : Player.queue.length > 0                ? "queue"
-                  : _expandedView.suggestions.length > 0   ? "suggestions"
-                  :                                          "empty"
+                // ── Search results overlay ──
+                TrackList {
+                    id: _searchList
+                    width: parent.width
+                    visible: _expandedView.searchResults.length > 0
+                    heading: "RESULTADOS"
+                    tracks: _expandedView.searchResults
+                    onTrackTapped: (idx) => {
+                        Player.playQueue(_expandedView.searchResults, idx)
+                        _expandedView.searchResults = []
+                        _expandedView.lastQuery     = ""
+                    }
+                }
 
-                heading: mode === "results"     ? "RESULTADOS"
-                       : mode === "queue"       ? "PRÓXIMAS MÚSICAS"
-                       : mode === "suggestions" ? "EM ALTA"
-                       :                          "PESQUISE PARA COMEÇAR"
+                // ── Home feed (scrollable column of carousels) ──
+                // Empty-state hint shown when the home feed hasn't loaded
+                // yet (boot before sync / no network / daemon down). The
+                // user can poke `Recarregar` to retry now; otherwise the
+                // PlayerController's status poll auto-retries every few
+                // seconds and the carousels appear as soon as data lands.
+                Column {
+                    anchors.centerIn: parent
+                    spacing: Theme.spaceL
+                    visible: _expandedView.searchResults.length === 0
+                          && _expandedView.homeSections.length === 0
+                          && Player.queue.length === 0
 
-                tracks: mode === "results"     ? _expandedView.searchResults
-                      : mode === "queue"       ? Player.queue
-                      : mode === "suggestions" ? _expandedView.suggestions
-                      :                          []
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: Player.daemonReady ? "Carregando músicas…"
+                                                 : "Sem conexão com o servidor"
+                        color: System.textMuted
+                        font.pixelSize: Theme.fontBody
+                    }
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width:  140
+                        height: Theme.btnMedium
+                        radius: Theme.radiusM
+                        color:  _retryArea.pressed ? System.accentDim : System.accent
 
-                currentIndex: mode === "queue" ? Player.queueIndex : -1
+                        Text {
+                            anchors.centerIn: parent
+                            text:  "Recarregar"
+                            color: "#000000"
+                            font.pixelSize: Theme.fontBody
+                            font.weight:    Font.Medium
+                        }
+                        MouseArea {
+                            id: _retryArea
+                            anchors.fill: parent
+                            onClicked: Player.loadHome()
+                        }
+                    }
+                }
 
-                onTrackTapped: (idx) => {
-                    if (mode === "queue") {
-                        Player.playQueue(Player.queue, idx)
-                    } else {
-                        Player.playQueue(_browse.tracks, idx)
-                        if (mode === "results") {
-                            _expandedView.searchResults = []
-                            _expandedView.lastQuery     = ""
+                Flickable {
+                    id: _feed
+                    anchors.fill: parent
+                    visible: _expandedView.searchResults.length === 0
+                          && _expandedView.homeSections.length > 0
+                    contentWidth: width
+                    contentHeight: _feedCol.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
+                    clip: true
+
+                    // Infinite scroll trigger — when the viewport is
+                    // within one screen-height of the bottom, request
+                    // the next /home page. PlayerController guards
+                    // against re-entrancy and exhausted feeds.
+                    onContentYChanged: {
+                        const remaining = contentHeight - (contentY + height)
+                        if (remaining < height) Player.loadMoreHome()
+                    }
+
+                    Column {
+                        id: _feedCol
+                        width: parent.width
+                        spacing: Theme.spaceXXL
+
+                        // Próximas músicas — current queue, highlighting
+                        // the playing track. Hidden when queue is empty.
+                        TrackCarousel {
+                            width:   parent.width
+                            visible: Player.queue.length > 0
+                            heading: "PRÓXIMAS MÚSICAS"
+                            tracks:  Player.queue
+                            currentIndex: Player.queueIndex
+                            onTrackTapped: (idx) => Player.playQueue(Player.queue, idx)
+                        }
+
+                        // One carousel per /home section.
+                        Repeater {
+                            model: _expandedView.homeSections
+                            delegate: TrackCarousel {
+                                required property var modelData
+                                width:   _feedCol.width
+                                heading: (modelData.title || "").toUpperCase()
+                                tracks:  modelData.items || []
+                                onTrackTapped: (idx) => Player.playQueue(modelData.items, idx)
+                            }
                         }
                     }
                 }

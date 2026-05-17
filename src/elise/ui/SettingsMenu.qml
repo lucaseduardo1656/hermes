@@ -86,6 +86,11 @@ Menu {
                 onClicked: root.activePage = "conectividade"
             }
             SettingsSidebarItem {
+                icon: "qrc:/icons/bluetooth.svg";   label: "Bluetooth"
+                active: root.activePage === "bluetooth"
+                onClicked: root.activePage = "bluetooth"
+            }
+            SettingsSidebarItem {
                 icon: "qrc:/icons/monitor.svg";     label: "Interface"
                 active: root.activePage === "interface"
                 onClicked: root.activePage = "interface"
@@ -117,6 +122,7 @@ Menu {
             case "contas":         return _contasPage
             case "veiculo":        return _veiculoPage
             case "conectividade":  return _conectividadePage
+            case "bluetooth":      return _bluetoothPage
             case "interface":      return _interfacePage
             case "som":            return _somPage
             case "sistema":        return _sistemaPage
@@ -128,6 +134,7 @@ Menu {
     Component { id: _contasPage;        SettingsPageContas        {} }
     Component { id: _veiculoPage;       SettingsPageVeiculo       {} }
     Component { id: _conectividadePage; SettingsPageConectividade {} }
+    Component { id: _bluetoothPage;     SettingsPageBluetooth     {} }
     Component { id: _interfacePage;     SettingsPageInterface     {} }
     Component { id: _somPage;           SettingsPageSom           {} }
     Component { id: _sistemaPage;       SettingsPageSistema       {} }

@@ -31,12 +31,21 @@ async def lifespan(app: FastAPI):
     # Start download worker as background task
     worker_task = asyncio.create_task(dl.run_worker())
     log.info("Download worker started")
+    # Warm the home cache in the background — keeps retrying until at
+    # least one upstream YT Music section lands, so /home never serves
+    # a degraded recents-only payload that would then sit in cache for
+    # the TTL.
+    from api.routes import warm_home_cache
+    warmer_task = asyncio.create_task(warm_home_cache())
+    log.info("Home cache warmer started")
     yield
-    worker_task.cancel()
-    try:
-        await worker_task
-    except asyncio.CancelledError:
-        pass
+    for t in (worker_task, warmer_task):
+        t.cancel()
+    for t in (worker_task, warmer_task):
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="hermes-music", version="0.1.0", lifespan=lifespan)

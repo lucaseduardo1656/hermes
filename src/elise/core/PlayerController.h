@@ -59,7 +59,8 @@ public slots:
     void playTrack(const QVariant &track);
     void playQueue(const QList<QVariant> &tracks, int index = 0);
 
-    void loadHome();
+    void loadHome();          // reset feed + fetch first page
+    void loadMoreHome();       // append next page; no-op once exhausted
     void loadLiked(const QString &source = "all");
     void loadPlaylistTracks(const QString &playlistId);
     void search(const QString &query, const QString &source = "all");
@@ -75,7 +76,10 @@ signals:
     void sourcesChanged();
 
     void tracksLoaded(QList<QVariant> tracks, QString context);
-    void homeLoaded(QList<QVariant> sections);
+    // Emitted on every successful /home response. `replace=true` means the
+    // feed was reset (initial load); `replace=false` means the new
+    // sections should be appended to the existing list (infinite scroll).
+    void homeLoaded(QList<QVariant> sections, bool replace);
 
 private:
     bool ensurePlayer();
@@ -95,11 +99,15 @@ private:
               std::function<void(const QJsonObject &)> cb = {});
     QUrl daemonUrl(const QString &path) const;
 
+    static constexpr const char *kDaemonHost            = "http://127.0.0.1:8765";
+    static constexpr int          kPollIntervalMs        = 8000;
+    static constexpr int          kHomePageSize          = 4;
+    static constexpr qint64       kPreviousSeekThresholdMs = 3000;
+    static constexpr qreal        kSeekFractionCap       = 0.999;
+
     QNetworkAccessManager *m_nam  = nullptr;
     mpv_handle            *m_mpv  = nullptr;
     QTimer                 m_pollTimer;
-
-    QString m_daemonHost = "http://127.0.0.1:8765";
 
     bool    m_playing     = false;
     qint64  m_positionMs  = 0;
@@ -108,11 +116,12 @@ private:
     QString m_trackArtist;
     QString m_trackAlbum;
     QString m_trackArtwork;
-    QString m_trackId;
-    QVariant m_currentTrack;
 
     QList<QVariant> m_queue;
-    int  m_queueIndex  = 0;
+    int  m_queueIndex   = 0;
+    int  m_homeOffset   = 0;     // next offset to request for /home
+    bool m_homeHasMore  = true;
+    bool m_homeLoading  = false; // in-flight /home request guard
     bool m_daemonReady = false;
     bool m_loading     = false;
     QVariantMap m_sources;

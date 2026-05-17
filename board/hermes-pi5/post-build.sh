@@ -30,6 +30,22 @@ mkdir -p "${SYSTEMD_DIR}/network-online.target.wants"
 ln -sf /lib/systemd/system/bluetooth.service \
     "${SYSTEMD_DIR}/multi-user.target.wants/bluetooth.service" 2>/dev/null || true
 
+# bluetoothd runs with default options for phase 1. We previously
+# enabled --experimental for battery/A2DP improvements, but it also
+# advertises LE Audio Broadcast (Auracast), which Samsung phones pick
+# up as a broadcast source and confuses the pairing UX. Re-enable
+# once LE Audio plumbing in WirePlumber is wired up.
+rm -f "${TARGET_DIR}/etc/systemd/system/bluetooth.service.d/experimental.conf"
+
+# PipeWire + WirePlumber as the system audio stack. WirePlumber handles
+# routing — when a BT device connects with the A2DP-source role we hold,
+# the PipeWire bluez5 module exposes a sink and WirePlumber routes audio
+# to it. Both run as system services (no per-user session here).
+ln -sf /usr/lib/systemd/system/pipewire.service \
+    "${SYSTEMD_DIR}/multi-user.target.wants/pipewire.service" 2>/dev/null || true
+ln -sf /usr/lib/systemd/system/wireplumber.service \
+    "${SYSTEMD_DIR}/multi-user.target.wants/wireplumber.service" 2>/dev/null || true
+
 ln -sf wpa_supplicant.conf \
     "${TARGET_DIR}/etc/wpa_supplicant/wpa_supplicant-wlan0.conf" 2>/dev/null || true
 
@@ -75,6 +91,65 @@ fi
 # build does not garbage-collect files removed from the overlay, so we do
 # it here explicitly to avoid the old file shadowing the package version.
 rm -f "${SYSTEMD_DIR}/hermes-music.service"
+
+# Disable services we don't use, *without* removing their packages —
+# systemd installs system users and tmpfiles entries via those packages,
+# and removing them leaves the rootfs in a broken state at image-gen
+# time (e.g. fakeroot fails because `systemd-network` user is missing).
+# Masking via /dev/null symlinks is the canonical way to keep a unit
+# installed but never started.
+#
+# - networkd / resolved / timesyncd: superseded by dhcpcd + wpa_supplicant
+#   (NetworkController talks to wpa_supplicant1 over D-Bus directly).
+#   Masking these saves ~1-2 s of boot time.
+# - hermes-music-bootstrap: replaced by build-time install of all Python
+#   deps into the target's site-packages — no first-boot setup needed.
+for u in \
+    systemd-networkd.service \
+    systemd-networkd-wait-online.service \
+    systemd-resolved.service ; do
+    ln -sf /dev/null "${SYSTEMD_DIR}/${u}"
+done
+# Keep timesyncd active: the Pi 5 has no battery-backed RTC, so without
+# NTP the clock starts at the rootfs build date and TLS certificate
+# checks fail with "certificate is not yet valid".
+#
+# Buildroot's target/ is incremental — older runs may have masked
+# timesyncd. Drop any stale /dev/null symlink and (re-)create the enable
+# link matching the unit's `WantedBy=sysinit.target`.
+rm -f "${SYSTEMD_DIR}/systemd-timesyncd.service"
+mkdir -p "${SYSTEMD_DIR}/sysinit.target.wants"
+ln -sf /usr/lib/systemd/system/systemd-timesyncd.service \
+    "${SYSTEMD_DIR}/sysinit.target.wants/systemd-timesyncd.service"
+
+# systemd-time-wait-sync.service blocks `time-sync.target` until the
+# clock has actually been synchronised by timesyncd. hermes.service and
+# hermes-music.service order themselves after that target so they never
+# run with a build-date clock that breaks TLS.
+ln -sf /usr/lib/systemd/system/systemd-time-wait-sync.service \
+    "${SYSTEMD_DIR}/sysinit.target.wants/systemd-time-wait-sync.service"
+rm -f "${TARGET_DIR}/usr/lib/systemd/system/hermes-music-bootstrap.service"
+rm -f "${SYSTEMD_DIR}/multi-user.target.wants/hermes-music-bootstrap.service"
+
+# /etc/resolv.conf ships as a symlink to /run/systemd/resolve/resolv.conf
+# because systemd installs it that way. With resolved masked, that path
+# never exists, so libc resolution fails. Replace it with a real file
+# containing a couple of public resolvers; dhcpcd will rewrite it from
+# DHCP options on link-up.
+rm -f "${TARGET_DIR}/etc/resolv.conf"
+cat > "${TARGET_DIR}/etc/resolv.conf" <<'EOF'
+# Default resolvers — dhcpcd rewrites this file at runtime with the
+# resolvers advertised over DHCP.
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+EOF
+
+# OpenSSL's compiled-in default CA file is /etc/ssl/cert.pem (BSD-style),
+# but Buildroot's ca-certificates package writes the bundle to
+# /etc/ssl/certs/ca-certificates.crt (Debian-style). Without the symlink,
+# Python's ssl module ends up with cafile=None and any HTTPS request
+# fails with CERTIFICATE_VERIFY_FAILED.
+ln -sf certs/ca-certificates.crt "${TARGET_DIR}/etc/ssl/cert.pem"
 
 # Não bloquear boot esperando rede
 ln -sf /dev/null \

@@ -124,6 +124,133 @@ async def get_recommendations() -> list[dict]:
     return tracks[:50]
 
 
+async def get_mood_catalog() -> list[dict]:
+    """
+    Flattened list of YT Music's mood/genre categories. Each entry is
+    `{title, params}` where `params` is the token used by
+    get_mood_playlists. Works unauthenticated.
+    """
+    yt = _client()
+    cats = await asyncio.to_thread(yt.get_mood_categories) or {}
+    out: list[dict] = []
+    for moods in cats.values():
+        for m in moods:
+            if m.get("params") and m.get("title"):
+                out.append({"title": m["title"], "params": m["params"]})
+    return out
+
+
+async def get_mood_section(params: str, per_section: int = 12) -> list[dict]:
+    """
+    Expand a mood category into a flat list of tracks by pulling the top
+    playlists for that mood and merging their tracks.
+    """
+    yt = _client()
+    playlists = await asyncio.to_thread(lambda: yt.get_mood_playlists(params)) or []
+    seen: set[str] = set()
+    tracks: list[dict] = []
+    for pl in playlists[:3]:
+        if len(tracks) >= per_section:
+            break
+        pid = pl.get("playlistId")
+        if not pid:
+            continue
+        try:
+            data = await asyncio.to_thread(
+                lambda p=pid: yt.get_playlist(p, limit=per_section))
+        except Exception:
+            continue
+        for it in (data.get("tracks") or [])[:per_section]:
+            t = _song_to_dict(it)
+            if not t or t["_yt_id"] in seen:
+                continue
+            seen.add(t["_yt_id"])
+            tracks.append(t)
+            if len(tracks) >= per_section:
+                break
+    return tracks
+
+
+async def get_charts_tracks(country: str = "BR", limit: int = 20) -> list[dict]:
+    """
+    Top songs chart for `country`. Works without authentication.
+
+    YT Music's public charts response doesn't include a flat song list for
+    unauth callers — it returns trending *playlists* (e.g. "Trending 20
+    Brazil"). We pick the first one and expand it into track dicts.
+    """
+    yt = _client()
+    charts = await asyncio.to_thread(lambda: yt.get_charts(country=country))
+    videos = (charts or {}).get("videos") or []
+    if not videos:
+        return []
+    playlist_id = videos[0].get("playlistId")
+    if not playlist_id:
+        return []
+    pl = await asyncio.to_thread(
+        lambda: yt.get_playlist(playlist_id, limit=limit))
+    items = pl.get("tracks") or []
+    return [t for it in items if (t := _song_to_dict(it))][:limit]
+
+
+async def get_home_sections(per_section: int = 12) -> list[dict]:
+    """
+    Return YT Music's home feed split into multiple sections, mirroring
+    the app's home screen ("Hits de hoje", "Quick picks", "Calm tunes",
+    etc.). Each section is converted into a flat list of tracks: direct
+    song entries pass through, playlist entries are expanded a few
+    tracks each.
+
+    Shape: [{ "title": str, "items": [track, ...] }, ...]
+    """
+    yt = _client()
+    raw = await asyncio.to_thread(lambda: yt.get_home(limit=8))
+    sections: list[dict] = []
+    for s in raw or []:
+        title = s.get("title") or ""
+        tracks: list[dict] = []
+        seen: set[str] = set()
+
+        direct_items   = []
+        playlist_items = []
+        for item in s.get("contents", []):
+            if item.get("videoId"):
+                direct_items.append(item)
+            elif item.get("playlistId"):
+                playlist_items.append(item)
+
+        for item in direct_items:
+            t = _song_to_dict(item)
+            if t and t["_yt_id"] not in seen:
+                seen.add(t["_yt_id"])
+                tracks.append(t)
+            if len(tracks) >= per_section:
+                break
+
+        # Fall back to expanding playlists when the section had none /
+        # not enough direct songs. Pulls a handful per playlist.
+        for item in playlist_items:
+            if len(tracks) >= per_section:
+                break
+            try:
+                pl = await asyncio.to_thread(
+                    lambda p=item["playlistId"]: yt.get_playlist(p, limit=6))
+            except Exception:
+                continue
+            for it in (pl.get("tracks") or [])[:6]:
+                t = _song_to_dict(it)
+                if not t or t["_yt_id"] in seen:
+                    continue
+                seen.add(t["_yt_id"])
+                tracks.append(t)
+                if len(tracks) >= per_section:
+                    break
+
+        if tracks:
+            sections.append({"title": title, "items": tracks})
+    return sections
+
+
 async def search(query: str, limit: int = 20) -> list[dict]:
     yt = _client()
     result = await asyncio.to_thread(lambda: yt.search(query, filter="songs", limit=limit))

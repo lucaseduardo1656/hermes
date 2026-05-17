@@ -1,14 +1,19 @@
 [Unit]
 Description=Hermes Music Daemon
-After=network-online.target hermes-music-bootstrap.service
-Wants=network-online.target
-Requires=hermes-music-bootstrap.service
+# time-sync.target is held by systemd-time-wait-sync until timesyncd
+# confirms NTP sync. Without it the first /home request hits TLS while
+# the clock is still at the rootfs build date, every cert reads as
+# "not yet valid", and the empty result poisons the cache. The daemon
+# *can* still start before sync (just blocks /home output until ready),
+# but waiting is the right thing to do for a system with no RTC.
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/usr/share/hermes-music
-ExecStart=/var/lib/hermes-music/venv/bin/python /usr/share/hermes-music/main.py
+ExecStart=/usr/bin/python3 /usr/share/hermes-music/main.py
 Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

@@ -192,11 +192,6 @@ Item {
                 }
 
                 SettingsCard {
-                    title: "Bluetooth"
-                    SettingsAction { label: "Em breve" }
-                }
-
-                SettingsCard {
                     title: "Hotspot"
                     SettingsAction { label: "Em breve" }
                 }

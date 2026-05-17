@@ -17,7 +17,6 @@ constexpr uint64_t kPropTimePos     = 1;
 constexpr uint64_t kPropDuration    = 2;
 constexpr uint64_t kPropPause       = 3;
 constexpr uint64_t kPropEofReached  = 4;
-constexpr uint64_t kPropCoreIdle    = 5;
 
 // mpv_set_wakeup_callback fires on the mpv worker thread. Re-enter the Qt
 // thread via a queued invocation, then drain events there.
@@ -33,7 +32,7 @@ PlayerController::PlayerController(QObject *parent)
     , m_nam(new QNetworkAccessManager(this))
 {
     connect(&m_pollTimer, &QTimer::timeout, this, &PlayerController::pollStatus);
-    m_pollTimer.start(8000);
+    m_pollTimer.start(kPollIntervalMs);
     pollStatus();
 }
 
@@ -84,7 +83,6 @@ bool PlayerController::ensurePlayer()
     mpv_observe_property(m_mpv, kPropDuration,   "duration",    MPV_FORMAT_DOUBLE);
     mpv_observe_property(m_mpv, kPropPause,      "pause",       MPV_FORMAT_FLAG);
     mpv_observe_property(m_mpv, kPropEofReached, "eof-reached", MPV_FORMAT_FLAG);
-    mpv_observe_property(m_mpv, kPropCoreIdle,   "core-idle",   MPV_FORMAT_FLAG);
 
     // Surface mpv errors/warnings to stderr (journalctl picks them up via
     // the elise unit). Temporary while we debug seek/pause behaviour.
@@ -115,7 +113,7 @@ void PlayerController::togglePlay()
 
 void PlayerController::previous()
 {
-    if (m_mpv && m_positionMs > 3000) {
+    if (m_mpv && m_positionMs > kPreviousSeekThresholdMs) {
         double zero = 0.0;
         mpv_set_property(m_mpv, "time-pos", MPV_FORMAT_DOUBLE, &zero);
         return;
@@ -131,6 +129,9 @@ void PlayerController::next()
 void PlayerController::seekTo(qreal fraction)
 {
     if (!m_mpv || m_durationMs <= 0) return;
+    // Cap below 1.0 — seeking exactly to duration triggers immediate EOF
+    // and auto-advances the queue, which the user reads as "skipped".
+    fraction = qBound<qreal>(0.0, fraction, kSeekFractionCap);
     double target = (fraction * m_durationMs) / 1000.0;   // seconds
     mpv_set_property(m_mpv, "time-pos", MPV_FORMAT_DOUBLE, &target);
 }
@@ -205,8 +206,6 @@ void PlayerController::setTrack(const QVariant &t)
     m_trackArtist  = m.value("artist").toString();
     m_trackAlbum   = m.value("album").toString();
     m_trackArtwork = m.value("artwork").toString();
-    m_trackId      = m.value("id").toString();
-    m_currentTrack = t;
     emit trackChanged();
 }
 
@@ -221,13 +220,35 @@ void PlayerController::setLoading(bool v)
 
 void PlayerController::loadHome()
 {
-    setLoading(true);
-    get("/home", [this](const QJsonObject &resp) {
-        setLoading(false);
+    // Reset pagination state then fetch the first page.
+    m_homeOffset  = 0;
+    m_homeHasMore = true;
+    m_homeLoading = false;
+    loadMoreHome();
+}
+
+void PlayerController::loadMoreHome()
+{
+    if (m_homeLoading || !m_homeHasMore) return;
+    m_homeLoading = true;
+    if (m_homeOffset == 0) setLoading(true);
+
+    const QString path = QString("/home?offset=%1&limit=%2")
+                             .arg(m_homeOffset).arg(kHomePageSize);
+    const int requestedOffset = m_homeOffset;
+
+    get(path, [this, requestedOffset](const QJsonObject &resp) {
+        m_homeLoading = false;
+        if (requestedOffset == 0) setLoading(false);
+
         QList<QVariant> sections;
         for (const QJsonValue &s : resp.value("sections").toArray())
             sections.append(s.toVariant());
-        emit homeLoaded(sections);
+
+        m_homeOffset  = requestedOffset + sections.size();
+        m_homeHasMore = resp.value("has_more").toBool();
+
+        emit homeLoaded(sections, /*replace=*/ requestedOffset == 0);
     });
 }
 
@@ -284,6 +305,7 @@ void PlayerController::pollStatus()
 {
     get("/status", [this](const QJsonObject &resp) {
         bool ok = resp.value("ok").toBool();
+        bool wasReady = m_daemonReady;
         if (ok != m_daemonReady) {
             m_daemonReady = ok;
             emit daemonReadyChanged();
@@ -292,6 +314,20 @@ void PlayerController::pollStatus()
         if (srcs != m_sources) {
             m_sources = srcs;
             emit sourcesChanged();
+        }
+        // Daemon just came back online — reset the feed so we re-fetch
+        // a fresh /home. Covers "device was on a captive portal /
+        // tunnel went down" recovery without forcing the user to tap
+        // Recarregar manually.
+        if (ok && !wasReady) {
+            loadHome();
+            return;
+        }
+        // Boot flow: daemon was already reachable but we never landed
+        // a populated feed (first request hit before clock sync / DNS
+        // came up). Quietly retry the first page.
+        if (ok && m_homeOffset == 0 && !m_homeLoading) {
+            loadMoreHome();
         }
     });
 }
@@ -382,7 +418,7 @@ void PlayerController::drainMpvEvents()
 
 QUrl PlayerController::daemonUrl(const QString &path) const
 {
-    return QUrl(m_daemonHost + path);
+    return QUrl(QString(kDaemonHost) + path);
 }
 
 void PlayerController::get(const QString &path,
