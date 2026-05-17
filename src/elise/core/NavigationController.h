@@ -23,6 +23,13 @@ public:
 public slots:
     void startDemo();
     void stop();
+    // Driven by CarMap as turn-by-turn maneuvers are recomputed from
+    // the Qt Location RouteModel. All five fields updated atomically.
+    Q_INVOKABLE void update(bool active,
+                            const QString &instruction,
+                            const QString &distance,
+                            const QString &direction,
+                            double bearing);
 
 signals:
     void activeChanged();

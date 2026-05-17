@@ -40,7 +40,10 @@ Item {
             _map.center = coord
     }
 
-    function clearDestination() { destination = null }
+    function clearDestination() {
+        destination = null
+        Nav.update(false, "", "", "straight", 0)
+    }
 
     // Async geocode wrapper. cb receives [{address, coordinate}, ...].
     // Queues a single follow-up request if the user keeps typing while
@@ -158,8 +161,72 @@ Item {
     Connections {
         target: _pos
         function onPositionChanged() {
-            if (root.hasDestination) _routeDebounce.restart()
+            if (root.hasDestination) {
+                _routeDebounce.restart()
+                _recomputeManeuver()
+            }
         }
+    }
+
+    Connections {
+        target: _routes
+        function onCountChanged() { _recomputeManeuver() }
+    }
+
+    // ── Turn-by-turn maneuver tracking ───────────────────────────────────────
+    // Walks the first route's segment list, finds the maneuver closest
+    // ahead of the user's current position, and pushes its instruction
+    // / distance / direction to the global Nav controller. The
+    // NavigationOverlay banner up top binds to Nav.
+    function _recomputeManeuver() {
+        if (!root.hasDestination || _routes.count === 0) {
+            Nav.update(false, "", "", "straight", 0)
+            return
+        }
+        const route = _routes.get(0)
+        const here  = _pos.position.coordinate.isValid
+                        ? _pos.position.coordinate
+                        : _map.center
+        if (!route || !route.segments || route.segments.length === 0) {
+            Nav.update(false, "", "", "straight", 0)
+            return
+        }
+
+        // Pick the maneuver with the smallest forward distance.
+        let bestIdx  = -1
+        let bestDist = Number.POSITIVE_INFINITY
+        for (let i = 0; i < route.segments.length; ++i) {
+            const m = route.segments[i].maneuver
+            if (!m || !m.valid) continue
+            const d = here.distanceTo(m.position)
+            if (d < bestDist) {
+                bestDist = d
+                bestIdx  = i
+            }
+        }
+        if (bestIdx < 0) {
+            Nav.update(false, "", "", "straight", 0)
+            return
+        }
+        const m = route.segments[bestIdx].maneuver
+        const dist = bestDist >= 1000
+                       ? (bestDist / 1000).toFixed(1) + " km"
+                       : Math.round(bestDist) + " m"
+        Nav.update(true, m.instructionText, dist,
+                   _maneuverDir(m.direction),
+                   here.azimuthTo(m.position))
+    }
+
+    // Map QGeoManeuver::InstructionDirection (Qt enum int) to the
+    // overlay's icon key (left/right/straight).
+    function _maneuverDir(d) {
+        // 0 NoDirection · 1 DirectionForward · 2 DirectionBearRight ·
+        // 3 DirectionLightRight · 4 DirectionRight · 5 DirectionHardRight ·
+        // 6 DirectionUTurnRight · 7 DirectionUTurnLeft · 8 DirectionHardLeft ·
+        // 9 DirectionLeft · 10 DirectionLightLeft · 11 DirectionBearLeft
+        if (d >= 2 && d <= 6) return "right"
+        if (d >= 7 && d <= 11) return "left"
+        return "straight"
     }
 
     // ── Map ──────────────────────────────────────────────────────────────────
