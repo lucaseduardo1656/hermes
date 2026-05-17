@@ -46,6 +46,25 @@ ln -sf /usr/lib/systemd/system/pipewire.service \
 ln -sf /usr/lib/systemd/system/wireplumber.service \
     "${SYSTEMD_DIR}/multi-user.target.wants/wireplumber.service" 2>/dev/null || true
 
+# gpsd uses systemd socket activation — the socket listens on :2947
+# and bluetoothd-style spawns the daemon on first client. We enable
+# the socket (not the service itself); elise's GpsController connects
+# whenever it likes and gpsd is fork()ed at that moment.
+ln -sf /usr/lib/systemd/system/gpsd.socket \
+    "${SYSTEMD_DIR}/sockets.target.wants/gpsd.socket" 2>/dev/null || true
+mkdir -p "${SYSTEMD_DIR}/sockets.target.wants"
+ln -sf /usr/lib/systemd/system/gpsd.socket \
+    "${SYSTEMD_DIR}/sockets.target.wants/gpsd.socket" 2>/dev/null || true
+# gpsd reads device list from /etc/default/gpsd. Until a real HAT is
+# wired, leave DEVICES empty — the daemon still listens and elise
+# falls back to its mock pose.
+mkdir -p "${TARGET_DIR}/etc/default"
+cat > "${TARGET_DIR}/etc/default/gpsd" <<'EOF'
+DEVICES=""
+GPSD_OPTIONS="-n"
+USBAUTO="true"
+EOF
+
 # Disable bluez's packaged mpris-proxy.service — phase 2B reads the
 # remote's MediaPlayer1 via bluez directly from BluetoothController,
 # so no MPRIS bridge is needed.

@@ -4,7 +4,7 @@ project(elise VERSION 0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Svg Network Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Svg Network Multimedia Location Positioning)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDBUS_CPP REQUIRED IMPORTED_TARGET sdbus-c++)
@@ -50,7 +50,7 @@ qt_add_qml_module(elise
     VERSION 1.0
     QML_FILES
         ui/Main.qml
-        ui/MapView.qml
+        ui/CarMap.qml
         ui/PlayerCard.qml
         ui/NavigationOverlay.qml
         ui/NotificationLayer.qml
@@ -130,6 +130,8 @@ target_link_libraries(elise PRIVATE
     Qt6::Svg
     Qt6::Network
     Qt6::Multimedia
+    Qt6::Location
+    Qt6::Positioning
     PkgConfig::SDBUS_CPP
     PkgConfig::MPV
 )

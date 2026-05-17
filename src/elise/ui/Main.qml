@@ -28,10 +28,23 @@ Window {
     property string playerState: "collapsed"
 
     // ── Map ──────────────────────────────────────────────────────────────────
-    MapView {
+    CarMap {
+        id: _map
         anchors.fill: parent
         z: 0
         interactive: root.playerState === "collapsed"
+    }
+
+    // Re-center map on current GPS — useful after the user pans away.
+    Fab {
+        anchors {
+            right:  parent.right; rightMargin: Theme.spaceL
+            bottom: _settingsFab.top; bottomMargin: Theme.spaceL
+        }
+        z: 600
+        icon: "qrc:/icons/arrow-straight.svg"
+        visible: root.playerState !== "expanded"
+        onClicked: _map.recenter()
     }
 
     // ── Input blocker (covers only area above the player card) ───────────────
@@ -47,6 +60,7 @@ Window {
     // Anchored to the top of the player card so it rises with the bar. Sits
     // below the player in z so the expanded player covers it.
     Fab {
+        id: _settingsFab
         anchors {
             right:  parent.right; rightMargin: Theme.spaceL
             bottom: _player.top;  bottomMargin: Theme.spaceL
