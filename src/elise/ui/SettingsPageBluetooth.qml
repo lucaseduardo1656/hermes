@@ -178,6 +178,40 @@ Item {
                         sublabel: Settings.bluetooth.adapterAlias || "—"
                     }
                 }
+
+                // Surface the AVRCP TG metadata from whatever phone is
+                // currently streaming to us, plus play/pause/skip
+                // buttons that send AVRCP CT commands back to it.
+                SettingsCard {
+                    visible: Settings.bluetooth.sourceActive
+                    title: "Mídia do dispositivo"
+
+                    SettingsAction {
+                        label: Settings.bluetooth.sourceTitle || "—"
+                        sublabel: {
+                            const parts = []
+                            if (Settings.bluetooth.sourceArtist !== "")
+                                parts.push(Settings.bluetooth.sourceArtist)
+                            if (Settings.bluetooth.sourceAlbum !== "")
+                                parts.push(Settings.bluetooth.sourceAlbum)
+                            return parts.join(" · ") || "—"
+                        }
+                    }
+                    SettingsAction {
+                        label: Settings.bluetooth.sourceStatus === "playing"
+                                 ? "Pausar"
+                                 : "Tocar"
+                        onTriggered: Settings.bluetooth.sourcePlayPause()
+                    }
+                    SettingsAction {
+                        label: "Próxima"
+                        onTriggered: Settings.bluetooth.sourceNext()
+                    }
+                    SettingsAction {
+                        label: "Anterior"
+                        onTriggered: Settings.bluetooth.sourcePrevious()
+                    }
+                }
             }
         }
     }

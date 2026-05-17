@@ -46,6 +46,11 @@ ln -sf /usr/lib/systemd/system/pipewire.service \
 ln -sf /usr/lib/systemd/system/wireplumber.service \
     "${SYSTEMD_DIR}/multi-user.target.wants/wireplumber.service" 2>/dev/null || true
 
+# Disable bluez's packaged mpris-proxy.service — phase 2B reads the
+# remote's MediaPlayer1 via bluez directly from BluetoothController,
+# so no MPRIS bridge is needed.
+rm -f "${SYSTEMD_DIR}/multi-user.target.wants/mpris-proxy.service"
+
 ln -sf wpa_supplicant.conf \
     "${TARGET_DIR}/etc/wpa_supplicant/wpa_supplicant-wlan0.conf" 2>/dev/null || true
 

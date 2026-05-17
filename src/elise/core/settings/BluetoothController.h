@@ -35,6 +35,17 @@ class BluetoothController : public QObject {
     Q_PROPERTY(QString      lastError        READ lastError        NOTIFY changed)
     Q_PROPERTY(QVariantList devices          READ devices          NOTIFY devicesChanged)
 
+    // AVRCP-CT surface: state of the MediaPlayer1 exposed by the
+    // currently-connected A2DP source (phone). All empty / zero when no
+    // remote is streaming.
+    Q_PROPERTY(bool    sourceActive    READ sourceActive    NOTIFY sourceChanged)
+    Q_PROPERTY(QString sourceStatus    READ sourceStatus    NOTIFY sourceChanged)
+    Q_PROPERTY(QString sourceTitle     READ sourceTitle     NOTIFY sourceChanged)
+    Q_PROPERTY(QString sourceArtist    READ sourceArtist    NOTIFY sourceChanged)
+    Q_PROPERTY(QString sourceAlbum     READ sourceAlbum     NOTIFY sourceChanged)
+    Q_PROPERTY(qint64  sourceDurationMs READ sourceDurationMs NOTIFY sourceChanged)
+    Q_PROPERTY(qint64  sourcePositionMs READ sourcePositionMs NOTIFY sourceChanged)
+
 public:
     explicit BluetoothController(QObject *parent = nullptr);
     ~BluetoothController() override;
@@ -48,6 +59,14 @@ public:
     QString      lastError()      const { return m_lastError; }
     QVariantList devices()        const { return m_devices; }
 
+    bool    sourceActive()    const { return !m_sourcePath.isEmpty(); }
+    QString sourceStatus()    const { return m_sourceStatus; }
+    QString sourceTitle()     const { return m_sourceTitle; }
+    QString sourceArtist()    const { return m_sourceArtist; }
+    QString sourceAlbum()     const { return m_sourceAlbum; }
+    qint64  sourceDurationMs() const { return m_sourceDurationMs; }
+    qint64  sourcePositionMs() const { return m_sourcePositionMs; }
+
     Q_INVOKABLE void setPowered(bool on);
     Q_INVOKABLE void setDiscoverable(bool on);
     Q_INVOKABLE void setAdapterAlias(const QString &alias);
@@ -58,9 +77,15 @@ public:
     Q_INVOKABLE void disconnectDevice(const QString &address);
     Q_INVOKABLE void forget(const QString &address);
 
+    // AVRCP-CT controls. No-op when sourceActive() is false.
+    Q_INVOKABLE void sourcePlayPause();
+    Q_INVOKABLE void sourceNext();
+    Q_INVOKABLE void sourcePrevious();
+
 signals:
     void changed();
     void devicesChanged();
+    void sourceChanged();
     void errorOccurred(const QString &message);
 
 private:
@@ -74,6 +99,13 @@ private:
     void autoReconnectTrusted();
     QString devicePathFor(const QString &address) const;
 
+    // AVRCP-CT helpers — watch a MediaPlayer1 path and surface its
+    // state via the Q_PROPERTY surface.
+    void adoptMediaPlayer(const QString &path);
+    void dropMediaPlayer();
+    void refreshSource();
+    void mediaPlayerCommand(const char *method);
+
     std::unique_ptr<sdbus::IConnection> m_conn;
     std::unique_ptr<sdbus::IProxy>      m_root;     // ObjectManager at /
     std::unique_ptr<sdbus::IProxy>      m_adapter;  // /org/bluez/hci0
@@ -81,6 +113,14 @@ private:
 
     // Per-device proxy cache — we hold one to listen for PropertiesChanged.
     QHash<QString, std::shared_ptr<sdbus::IProxy>> m_devProxies;
+    std::shared_ptr<sdbus::IProxy>                 m_sourceProxy;
+    QString                                        m_sourcePath;
+    QString                                        m_sourceStatus;
+    QString                                        m_sourceTitle;
+    QString                                        m_sourceArtist;
+    QString                                        m_sourceAlbum;
+    qint64                                         m_sourceDurationMs = 0;
+    qint64                                         m_sourcePositionMs = 0;
 
     QTimer       m_retryTimer;
     bool         m_powered        = false;

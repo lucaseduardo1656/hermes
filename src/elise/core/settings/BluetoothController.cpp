@@ -23,6 +23,7 @@ constexpr const char *kPropsIf      = "org.freedesktop.DBus.Properties";
 constexpr const char *kObjMgrIf     = "org.freedesktop.DBus.ObjectManager";
 constexpr const char *kAgentObject  = "/com/hermes/btagent";
 constexpr const char *kAgentCaps    = "NoInputNoOutput";
+constexpr const char *kMediaPlayerIf = "org.bluez.MediaPlayer1";
 
 // Pull a typed value out of a Variant without throwing across boundaries.
 QString variantStr(const sdbus::Variant &v) {
@@ -45,6 +46,12 @@ QString addressFromPath(const QString &path) {
 
 bool isDevicePath(const std::string &p) {
     return p.rfind("/org/bluez/hci0/dev_", 0) == 0;
+}
+
+// MediaPlayer1 paths are `<device>/playerN`.
+bool isMediaPlayerPath(const std::string &p) {
+    if (!isDevicePath(p)) return false;
+    return p.find("/player") != std::string::npos;
 }
 }
 
@@ -205,12 +212,19 @@ void BluetoothController::refreshAdapterState() {
 }
 
 void BluetoothController::onInterfacesAdded(const QString &path) {
-    if (path.startsWith("/org/bluez/hci0/dev_"))
-        rebuildDevices();
+    if (!path.startsWith("/org/bluez/hci0/dev_")) return;
+    // A MediaPlayer1 appearing under a connected device means an
+    // A2DP source connected and is exposing AVRCP TG state — we
+    // adopt it as the current source.
+    if (path.contains("/player") && m_sourcePath.isEmpty())
+        adoptMediaPlayer(path);
+    rebuildDevices();
 }
 
 void BluetoothController::onInterfacesRemoved(const QString &path) {
     if (path.startsWith("/org/bluez/hci0/dev_")) {
+        if (path == m_sourcePath || path.contains("/player"))
+            if (path == m_sourcePath) dropMediaPlayer();
         m_devProxies.remove(path);
         rebuildDevices();
     }
@@ -229,6 +243,19 @@ void BluetoothController::rebuildDevices() {
                           std::map<std::string, sdbus::Variant>>> objects;
         m_root->callMethod("GetManagedObjects").onInterface(kObjMgrIf)
               .storeResultsTo(objects);
+
+        // Pick up any MediaPlayer1 that may already exist on a
+        // device — happens at startup after reconnect, where we miss
+        // the InterfacesAdded edge.
+        if (m_sourcePath.isEmpty()) {
+            for (const auto &[opath, ifaces] : objects) {
+                const std::string p = opath;
+                if (!isMediaPlayerPath(p)) continue;
+                if (ifaces.find(kMediaPlayerIf) == ifaces.end()) continue;
+                adoptMediaPlayer(QString::fromStdString(p));
+                break;
+            }
+        }
 
         QVariantList out;
         QString prevConnected = m_connectedAlias;
@@ -496,3 +523,126 @@ void BluetoothController::forget(const QString &address) {
         emit errorOccurred(QString::fromStdString(e.getMessage()));
     }
 }
+
+// ── AVRCP CT (read + control remote player) ─────────────────────────────────
+
+void BluetoothController::adoptMediaPlayer(const QString &path) {
+    if (path.isEmpty() || !m_conn) return;
+    m_sourcePath = path;
+    try {
+        auto proxy = std::shared_ptr<sdbus::IProxy>(sdbus::createProxy(
+            *m_conn,
+            sdbus::ServiceName{kService},
+            sdbus::ObjectPath{path.toStdString()}).release());
+        proxy->uponSignal("PropertiesChanged").onInterface(kPropsIf)
+            .call([this](const std::string &iface,
+                          const std::map<std::string, sdbus::Variant> &,
+                          const std::vector<std::string> &) {
+                if (iface != kMediaPlayerIf) return;
+                QMetaObject::invokeMethod(this, [this]{ refreshSource(); },
+                                          Qt::QueuedConnection);
+            });
+        m_sourceProxy = std::move(proxy);
+    } catch (const sdbus::Error &e) {
+        qWarning() << "BluetoothController: adoptMediaPlayer:"
+                   << e.getMessage().c_str();
+        m_sourcePath.clear();
+        m_sourceProxy.reset();
+        return;
+    }
+    refreshSource();
+}
+
+void BluetoothController::dropMediaPlayer() {
+    m_sourceProxy.reset();
+    m_sourcePath.clear();
+    m_sourceStatus.clear();
+    m_sourceTitle.clear();
+    m_sourceArtist.clear();
+    m_sourceAlbum.clear();
+    m_sourceDurationMs = 0;
+    m_sourcePositionMs = 0;
+    emit sourceChanged();
+}
+
+void BluetoothController::refreshSource() {
+    if (!m_sourceProxy) return;
+    try {
+        QString status;
+        QString title, artist, album;
+        qint64  durationMs = 0, positionMs = 0;
+        try {
+            status = QString::fromStdString(
+                m_sourceProxy->getProperty("Status")
+                             .onInterface(kMediaPlayerIf)
+                             .get<std::string>());
+        } catch (...) {}
+        try {
+            // Track is a a{sv}; pull strings out of it.
+            auto track = m_sourceProxy->getProperty("Track")
+                                       .onInterface(kMediaPlayerIf)
+                                       .get<std::map<std::string,
+                                                     sdbus::Variant>>();
+            auto sget = [&](const char *k) -> QString {
+                auto it = track.find(k);
+                if (it == track.end()) return {};
+                try { return QString::fromStdString(
+                    it->second.get<std::string>()); } catch (...) { return {}; }
+            };
+            title  = sget("Title");
+            artist = sget("Artist");
+            album  = sget("Album");
+            auto durIt = track.find("Duration");
+            if (durIt != track.end()) {
+                try { durationMs = qint64(durIt->second.get<uint32_t>()); }
+                catch (...) {}
+            }
+        } catch (...) {}
+        try {
+            positionMs = qint64(m_sourceProxy->getProperty("Position")
+                                .onInterface(kMediaPlayerIf)
+                                .get<uint32_t>());
+        } catch (...) {}
+
+        const bool changed =
+            status     != m_sourceStatus
+         || title      != m_sourceTitle
+         || artist     != m_sourceArtist
+         || album      != m_sourceAlbum
+         || durationMs != m_sourceDurationMs
+         || positionMs != m_sourcePositionMs;
+        if (!changed) return;
+        m_sourceStatus     = status;
+        m_sourceTitle      = title;
+        m_sourceArtist     = artist;
+        m_sourceAlbum      = album;
+        m_sourceDurationMs = durationMs;
+        m_sourcePositionMs = positionMs;
+        emit sourceChanged();
+    } catch (const sdbus::Error &e) {
+        qWarning() << "BluetoothController: refreshSource:"
+                   << e.getMessage().c_str();
+    }
+}
+
+void BluetoothController::mediaPlayerCommand(const char *method) {
+    if (!m_sourceProxy) return;
+    try {
+        m_sourceProxy->callMethod(method).onInterface(kMediaPlayerIf)
+                     .dontExpectReply();
+    } catch (const sdbus::Error &e) {
+        emit errorOccurred(QString::fromStdString(e.getMessage()));
+    }
+}
+
+void BluetoothController::sourcePlayPause() {
+    // bluez MediaPlayer1 has Play and Pause but no PlayPause — pick
+    // based on current status. If unknown, default to Play.
+    if (m_sourceStatus == QLatin1String("playing"))
+        mediaPlayerCommand("Pause");
+    else
+        mediaPlayerCommand("Play");
+}
+
+void BluetoothController::sourceNext()     { mediaPlayerCommand("Next"); }
+void BluetoothController::sourcePrevious() { mediaPlayerCommand("Previous"); }
