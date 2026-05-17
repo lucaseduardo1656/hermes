@@ -207,6 +207,15 @@ Item {
                 size: Theme.iconS
                 onTapped: Player.next()
             }
+            IconBtn {
+                anchors.verticalCenter: parent.verticalCenter
+                icon: "qrc:/icons/close.svg"
+                size: Theme.iconS
+                // Clear the player — empties the queue + blanks the
+                // track + stops mpv. Main.qml auto-hides the bar when
+                // trackTitle goes empty.
+                onTapped: Player.clear()
+            }
         }
     }
 

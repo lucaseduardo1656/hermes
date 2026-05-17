@@ -20,6 +20,10 @@ QtObject {
     property string title:    ""
     property string buffer:   ""
     property bool   password: false
+    // bare = no dim overlay and no floating modal card; only the
+    // QWERTY tray docks at the bottom. The caller keeps showing its
+    // own input surface, mirrored via the `buffer` property.
+    property bool   bare:     false
 
     // Callbacks (functions). Stored as `var` so JS closures can be assigned.
     property var _onSubmit: null
@@ -28,6 +32,7 @@ QtObject {
     function show(opts) {
         title     = opts.title    || ""
         password  = opts.password === true
+        bare      = opts.bare === true
         buffer    = opts.initial  || ""
         _onSubmit = opts.onSubmit || null
         _onCancel = opts.onCancel || null
@@ -55,6 +60,7 @@ QtObject {
         buffer    = ""
         title     = ""
         password  = false
+        bare      = false
         _onSubmit = null
         _onCancel = null
     }

@@ -163,6 +163,28 @@ void PlayerController::playQueue(const QList<QVariant> &tracks, int index)
         playTrack(tracks.at(m_queueIndex));
 }
 
+void PlayerController::clear()
+{
+    if (m_mpv) {
+        const char *cmd[] = { "stop", nullptr };
+        mpv_command(m_mpv, cmd);
+    }
+    m_queue.clear();
+    m_queueIndex   = 0;
+    m_trackTitle.clear();
+    m_trackArtist.clear();
+    m_trackAlbum.clear();
+    m_trackArtwork.clear();
+    m_positionMs   = 0;
+    m_durationMs   = 0;
+    m_playing      = false;
+    emit trackChanged();
+    emit queueChanged();
+    emit progressChanged();
+    emit durationChanged();
+    emit playingChanged();
+}
+
 void PlayerController::resolveAndPlay(const QVariant &track)
 {
     QVariantMap t = track.toMap();

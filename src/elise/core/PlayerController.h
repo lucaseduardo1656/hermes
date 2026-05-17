@@ -58,6 +58,10 @@ public slots:
 
     void playTrack(const QVariant &track);
     void playQueue(const QList<QVariant> &tracks, int index = 0);
+    // Stop mpv, drop the queue, blank the now-playing track. Used by
+    // the player card's close button — the auto-hide rule in Main.qml
+    // keys off trackTitle being empty.
+    void clear();
 
     void loadHome();          // reset feed + fetch first page
     void loadMoreHome();       // append next page; no-op once exhausted

@@ -51,6 +51,7 @@ qt_add_qml_module(elise
     QML_FILES
         ui/Main.qml
         ui/CarMap.qml
+        ui/MapSearchBar.qml
         ui/PlayerCard.qml
         ui/NavigationOverlay.qml
         ui/NotificationLayer.qml

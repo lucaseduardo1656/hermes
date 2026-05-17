@@ -42,10 +42,18 @@ Item {
     readonly property color _txtMute: "#6B7280"
 
     // ── Dim layer (tap outside = dismiss) ───────────────────────────────
+    // Hidden in bare mode — the caller (e.g. map search bar) keeps
+    // showing its own input surface and we don't want to blanket the
+    // screen.
     Rectangle {
         anchors.fill: parent
         color: "#80000000"
-        MouseArea { anchors.fill: parent; onClicked: Keyboard.dismiss() }
+        visible: !Keyboard.bare
+        MouseArea {
+            anchors.fill: parent
+            enabled: !Keyboard.bare
+            onClicked: Keyboard.dismiss()
+        }
     }
 
     property bool _revealPwd: false
@@ -59,6 +67,7 @@ Item {
     // Vertically centered in the area ABOVE the bottom key tray.
     Rectangle {
         id: _card
+        visible: !Keyboard.bare
         x: (parent.width - width) / 2
         y: (parent.height - _tray.height - height) / 2
         width:  Math.min(parent.width - Theme.spaceXXL * 2, 520)
