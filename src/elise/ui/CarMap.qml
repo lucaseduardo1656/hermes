@@ -33,6 +33,10 @@ Item {
 
     readonly property bool  hasDestination: destination !== null
                                          && destination.isValid
+    // Map bearing exposed so a floating compass can mirror it.
+    readonly property real  bearing: _map ? _map.bearing : 0
+
+    function resetBearing() { _map.bearing = 0 }
     readonly property real  routeDistanceM: _routes.count > 0
                                               ? _routes.get(0).distance : 0
     readonly property real  routeDurationS: _routes.count > 0

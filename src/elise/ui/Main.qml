@@ -120,17 +120,21 @@ Window {
         }
     }
 
-    // Re-center map on current GPS — useful after the user pans away.
-    Fab {
-        id: _recenterFab
+    // Compass dial — appears whenever the map has been rotated off
+    // north. Tap to snap back. Sits just above the recenter Fab.
+    // Compass + recenter combo — sits where the recenter arrow used
+    // to. Always visible: shows north when bearing != 0, doubles as
+    // the "snap back to GPS + north" button when tapped.
+    CompassRose {
+        id: _recenterFab     // kept the id so other anchors don't shift
         anchors {
             right:  parent.right; rightMargin: Theme.spaceL
             bottom: _settingsFab.top; bottomMargin: Theme.spaceL
         }
         z: 600
-        icon: "qrc:/icons/arrow-straight.svg"
+        bearing: _map ? _map.bearing : 0
         visible: root.playerState !== "expanded"
-        onClicked: if (_map) _map.recenter()
+        onResetRequested: if (_map) _map.recenter()
     }
 
     // Music Fab — only when the player is hidden. Tapping summons the

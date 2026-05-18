@@ -87,6 +87,7 @@ qt_add_qml_module(elise
         ui/ActionSheet.qml
         ui/MapBridge.qml
         ui/SettingsPageMapasOffline.qml
+        ui/CompassRose.qml
         ui/ActionSheetView.qml
         ui/TrackList.qml
         ui/TrackCarousel.qml
