@@ -31,6 +31,30 @@ Flickable {
         }
 
         SettingsCard {
+            title: "Mapa"
+
+            SettingsAction {
+                label: "Estilo do mapa"
+                sublabel: {
+                    const cur = Settings.appearance.mapStyle
+                    const opts = Settings.appearance.mapStyleOptions
+                    for (let i = 0; i < opts.length; ++i)
+                        if (opts[i].key === cur) return opts[i].label
+                    return cur
+                }
+                onTriggered: {
+                    const items = Settings.appearance.mapStyleOptions.map(o => ({
+                        label: o.label,
+                        onSelected: function() {
+                            Settings.appearance.setMapStyle(o.key)
+                        }
+                    }))
+                    ActionSheet.show({ title: "Estilo do mapa", items: items })
+                }
+            }
+        }
+
+        SettingsCard {
             title: "Movimento"
 
             SettingsToggle { label: "Animações";             checked: true }

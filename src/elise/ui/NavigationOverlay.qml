@@ -10,18 +10,15 @@ Item {
     property string distance:    Nav.distance
     property string direction:   Nav.direction
 
-    visible: Nav.active
+    implicitWidth:  card.width
+    implicitHeight: card.height
 
     Rectangle {
         id: card
-        // Card style — same fixed width as the search bar so the two
-        // top-anchored chips visually align. Height grows with the
-        // instruction text when it wraps.
-        anchors {
-            top:  parent.top; topMargin:  Theme.spaceM
-            left: parent.left; leftMargin: Theme.spaceL
-        }
-        width:  320
+        // Card style. Width comes from the parent (Main mounts this
+        // inside a Column with a fixed-width sibling row). Height
+        // grows with the instruction text when it wraps.
+        anchors.fill: parent
         height: Math.max(Theme.navCardH, _row.implicitHeight + Theme.spaceL)
         radius: Theme.radiusL
         color:  System.surface
