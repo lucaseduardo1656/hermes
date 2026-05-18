@@ -48,6 +48,11 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: System.surface
+        // Catch-all to keep map pointer handlers below from receiving
+        // taps that visually land on the menu. Without this the map
+        // pans/zooms underneath any tap that misses an interactive
+        // widget inside the menu.
+        MouseArea { anchors.fill: parent; onClicked: {} }
     }
 
     // ── Content slot — fills the entire menu surface ─────────────────────────

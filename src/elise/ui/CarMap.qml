@@ -18,6 +18,11 @@ Item {
     // ── Public API ───────────────────────────────────────────────────────────
     property bool interactive: true
     property var  destination: null         // QtPositioning.coordinate or null
+    // MapLibre style JSON URL. Set by the outer Loader from
+    // Settings.appearance.mapStyleUrl. Changing it requires recreating
+    // CarMap (the Plugin reads it at construction time), which the
+    // Loader does for us.
+    property string styleUrl: "https://tiles.openfreemap.org/styles/dark"
 
     readonly property bool  hasDestination: destination !== null
                                          && destination.isValid
@@ -83,31 +88,40 @@ Item {
     }
 
     // ── Plugin (single instance shared by Map + Geocode + Route) ─────────────
+    // MapLibre Native plugin — GPU-rendered vector tiles, smooth zoom,
+    // identical engine the Tesla/BMW iX HMIs use. Style URL points at
+    // OpenFreeMap's Liberty style (free, no API key, OpenMapTiles
+    // schema), which is the closest open equivalent to Tesla's dark
+    // base map. Swap to a different styleUrl later if you sign up for
+    // MapTiler/Mapbox and want a more polished theme.
     Plugin {
         id: _osm
+        name: "maplibre"
+        PluginParameter {
+            name: "maplibre.map.styles"
+            value: root.styleUrl
+        }
+        // OSRM + Nominatim still come from Qt's OSM-side defaults —
+        // maplibre plugin only handles map rendering. We register a
+        // second Plugin for routing/geocoding.
+    }
+
+    // Routing + geocoding plugin (OSM) — kept as the QtLocation OSM
+    // plugin which wraps OSRM + Nominatim. We can't ask maplibre for
+    // these; it's render-only.
+    Plugin {
+        id: _osmServices
         name: "osm"
         PluginParameter { name: "osm.useragent"
                           value: "Elise/0.1 hermes-infotainment" }
-        // The OSM plugin polls https://maps-redirect.qt.io for a list
-        // of community providers on startup; that URL is slow and
-        // can hang the first map render. We pin the canonical hosts
-        // directly and skip the lookup.
         PluginParameter { name: "osm.mapping.providersrepository.disabled"
                           value: "true" }
-        PluginParameter { name: "osm.mapping.host"
-                          value: "https://tile.openstreetmap.org/" }
-        PluginParameter { name: "osm.mapping.highdpi_tiles"
-                          value: "true" }
-        // Routing + geocoding hosts left as Qt's defaults (OSRM demo +
-        // Nominatim). Overriding `osm.routing.host` clobbers the
-        // `route/v1/<profile>/` path that the plugin appends, so the
-        // resulting URL hits the OSRM root and 400s silently.
     }
 
     // ── Geocoding ────────────────────────────────────────────────────────────
     GeocodeModel {
         id: _geocoder
-        plugin: _osm
+        plugin: _osmServices
         autoUpdate: false
         limit: 5
         property var    _pending: null
@@ -146,7 +160,7 @@ Item {
 
     RouteModel {
         id: _routes
-        plugin: _osm
+        plugin: _osmServices
         query: _routeQuery
         autoUpdate: false
     }

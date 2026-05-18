@@ -5,5 +5,6 @@ SettingsController::SettingsController(QObject *parent)
     , m_sys(new SystemInfoController(this))
     , m_network(new NetworkController(this))
     , m_bluetooth(new BluetoothController(this))
+    , m_appearance(new AppearanceController(this))
 {
 }

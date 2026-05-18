@@ -33,6 +33,8 @@ qt_add_executable(elise
     core/settings/NetworkController.cpp
     core/settings/BluetoothController.h
     core/settings/BluetoothController.cpp
+    core/settings/AppearanceController.h
+    core/settings/AppearanceController.cpp
 )
 
 set_source_files_properties(ui/Theme.qml PROPERTIES

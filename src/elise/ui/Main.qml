@@ -37,63 +37,85 @@ Window {
      || root.playerState !== "collapsed"
 
     // ── Map ──────────────────────────────────────────────────────────────────
-    CarMap {
-        id: _map
+    // MapLibre reads its style at Plugin construction, so changing
+    // styles at runtime means destroying and re-creating CarMap.
+    // A Loader keyed on the style URL is the cheapest way to do that:
+    // toggling `active` tears the old map down and rebuilds with the
+    // new URL.
+    Loader {
+        id: _mapLoader
         anchors.fill: parent
         z: 0
-        interactive: root.playerState === "collapsed"
+        sourceComponent: _mapComponent
+        property string _styleUrl: Settings.appearance.mapStyleUrl
+        on_StyleUrlChanged: { active = false; active = true }
+    }
+    // Alias for the rest of Main.qml — search bar, summary, etc.
+    // bind through `_map`.
+    property var _map: _mapLoader.item
+
+    Component {
+        id: _mapComponent
+        CarMap {
+            interactive: root.playerState === "collapsed"
+                      && !_settings.open
+                      && !Keyboard.active
+            styleUrl:    _mapLoader._styleUrl
+        }
     }
 
-    // ── Map search bar ───────────────────────────────────────────────────────
-    // Fixed pixel width so the bar feels like a chip floating over the
-    // map instead of a long header — Tesla / Apple Maps style. Drops
-    // below the navigation banner when an active route is running so
-    // the two top-left chips stack instead of overlapping.
-    MapSearchBar {
-        id: _mapSearch
+    // ── Top-left chip stack ──────────────────────────────────────────────────
+    // Single Column owns the three chips (search → nav banner → route
+    // summary) so they always stack with the same spacing and no
+    // cross-item anchor weirdness.
+    Column {
+        id: _topStack
         anchors {
-            top:  Nav.active ? _navOverlay.bottom : parent.top
-            topMargin:  Nav.active ? Theme.spaceS : Theme.spaceL
+            top:  parent.top;  topMargin:  Theme.spaceL
             left: parent.left; leftMargin: Theme.spaceL
         }
-        width: 320
+        spacing: Theme.spaceS
         z: 700
         visible: root.playerState !== "expanded"
-        map: _map
-    }
 
-    // Route summary card — shown when an active destination has a
-    // computed route. Sits under the search bar.
-    Rectangle {
-        anchors {
-            top:   _mapSearch.bottom; topMargin: Theme.spaceS
-            left:  _mapSearch.left
-            right: _mapSearch.right
+        MapSearchBar {
+            id: _mapSearch
+            width: 320
+            map: root._map
         }
-        z: 700
-        visible: _map.hasDestination && _map.routeDistanceM > 0
-              && root.playerState !== "expanded"
-        height: Theme.btnLarge
-        radius: Theme.radiusL
-        color: System.surface
-        border.color: System.border
-        border.width: 1
 
-        Row {
-            anchors { fill: parent; leftMargin: Theme.spaceL; rightMargin: Theme.spaceL }
-            spacing: Theme.spaceL
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                text: (_map.routeDistanceM / 1000).toFixed(1) + " km"
-                color: System.textPrimary
-                font.pixelSize: Theme.fontBody
-                font.weight: Font.Medium
-            }
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                text: Math.round(_map.routeDurationS / 60) + " min"
-                color: System.textSecondary
-                font.pixelSize: Theme.fontBody
+        NavigationOverlay {
+            id: _navOverlay
+            width: 320
+            height: Theme.navOverlayH
+            visible: Nav.active
+        }
+
+        Rectangle {
+            id: _routeSummary
+            width: 320
+            height: Theme.btnLarge
+            visible: _map && _map.hasDestination && _map.routeDistanceM > 0
+            radius: Theme.radiusL
+            color: System.surface
+            border.color: System.border
+            border.width: 1
+            Row {
+                anchors { fill: parent; leftMargin: Theme.spaceL; rightMargin: Theme.spaceL }
+                spacing: Theme.spaceL
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: _map ? (_map.routeDistanceM / 1000).toFixed(1) + " km" : ""
+                    color: System.textPrimary
+                    font.pixelSize: Theme.fontBody
+                    font.weight: Font.Medium
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: _map ? Math.round(_map.routeDurationS / 60) + " min" : ""
+                    color: System.textSecondary
+                    font.pixelSize: Theme.fontBody
+                }
             }
         }
     }
@@ -108,7 +130,7 @@ Window {
         z: 600
         icon: "qrc:/icons/arrow-straight.svg"
         visible: root.playerState !== "expanded"
-        onClicked: _map.recenter()
+        onClicked: if (_map) _map.recenter()
     }
 
     // Music Fab — only when the player is hidden. Tapping summons the
@@ -167,13 +189,7 @@ Window {
         onStateChangeRequested: (s) => root.playerState = s
     }
 
-    // ── Navigation overlay ───────────────────────────────────────────────────
-    NavigationOverlay {
-        id: _navOverlay
-        anchors { top: parent.top; left: parent.left; right: parent.right }
-        height: Theme.navOverlayH
-        z: 800
-    }
+    // NavigationOverlay is mounted inside the top-left Column above.
 
     // ── Notifications ────────────────────────────────────────────────────────
     NotificationLayer {
