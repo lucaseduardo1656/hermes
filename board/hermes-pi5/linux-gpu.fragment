@@ -1,0 +1,7 @@
+# GPU / Display — RPi5 (BCM2712, VideoCore VII)
+# DRM, VC4 (display controller) e V3D (GPU 3D) built-in.
+# Evita carregamento de módulos pelo systemd no boot, display disponível
+# assim que o kernel termina de inicializar — sem ENOSYS, sem módulos XZ.
+CONFIG_DRM=y
+CONFIG_DRM_VC4=y
+CONFIG_DRM_V3D=y

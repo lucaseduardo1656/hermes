@@ -1,4 +1,6 @@
-# Hermes — Especificação de Layout e UI
+# Elise — Especificação de Layout e UI
+
+> **Nota:** O app atualmente se chama `hermes-app` no código. Será renomeado para `elise` posteriormente — adiado para evitar conflitos.
 
 ## Resolução Alvo
 **1024 × 600px** — landscape, touchscreen capacitivo
@@ -19,31 +21,37 @@ Inspirado em: Mapbox Automotive SDK, Tesla Model 3
 
 ## Layout Principal
 
+Referência visual: **Tesla Model 3 dark mode** — adaptado para carro a combustão (sem indicadores de energia/bateria/OBD-II).
+
 ```
 ┌─────────────────────────────────────────────────────┐  600px
-│                                     ┌─────────────┐ │
-│                                     │  CARD ZONA  │ │ ← cards flutuantes
-│            MAPA 3D                  │  (alertas,  │ │   aparecem/somem
-│         (MapLibre GL)               │   player,   │ │   com animação
-│                                     │   clima)    │ │
-│         [ícone posição]             └─────────────┘ │
+│  top bar: 📶  11:42         [botão ação]            │  ~40px
+├─────────────────────────────────────────────────────┤
 │                                                     │
-├─────────────────────────────────────────────────────┤ ← 540px
-│  ↑  Vire à direita em 420m   Av. Paulista     12min │  nav strip (40px)
-├──────────┬──────────┬──────────┬───────────────────┤ ← 580px
-│  [  🗺  ]│  [  🎵  ]│  [  ⚙  ]│  📶  🔊  11:42   │  dock (60px)
-└──────────┴──────────┴──────────┴───────────────────┘  600px
+│                                                     │
+│                  MAPA 3D                            │
+│               (MapLibre GL)                         │
+│                                                     │
+│                                                     │
+├─────────────────────────────────────────────────────┤ ← aparece só em rota
+│  ↑  Vire à direita em 420m   Av. Paulista     12min │  nav strip (~40px)
+├─────────────────────────────────────────────────────┤ ← aparece só com música
+│  🎵  Tokyo Tuesday — Nujabes    ◀◀  ▶▶  ▶▶         │  player strip (~60px)
+└─────────────────────────────────────────────────────┘  600px
           |←─────────── 1024px ──────────────────────→|
 ```
+
+> **Sem bottom dock.** Navegação entre módulos via mecanismo a definir (gesto, overlay, etc.).
 
 ### Zonas do Layout
 
 | Zona | Posição | Tamanho | Conteúdo |
 |------|---------|---------|----------|
-| Mapa | 0,0 | 1024×540px | MapLibre GL Native (fullscreen) |
-| Nav Strip | 0,540 | 1024×40px | Instrução atual + distância + ETA |
-| Dock | 0,580 | 1024×60px | Botões de app + status icons |
-| Card Zone | top-right | ~280×auto | Cards flutuantes empilhados |
+| Top Bar | 0,0 | 1024×40px | Horário, status de conexão, ação contextual |
+| Mapa | 0,40 | 1024×(variável) | MapLibre GL Native (fullscreen) |
+| Nav Strip | acima do player | 1024×40px | Instrução + distância + ETA — só durante rota |
+| Player Strip | bottom | 1024×60px | Controles de mídia — só quando música ativa |
+| Card Zone | top-right | ~280×auto | Cards flutuantes: alertas, clima, POIs |
 
 ---
 
@@ -66,18 +74,7 @@ Visível apenas durante navegação ativa. Recolhe quando não há rota.
 
 ## Dock (App Bar)
 
-Sempre visível. 3 botões de app à esquerda + status à direita.
-
-```
-┌──────────┬──────────┬──────────┬────────────────────┐
-│    🗺    │    🎵    │    ⚙    │  📶  🔊  11:42    │
-│   Mapa   │  Player  │  Config  │                    │
-└──────────┴──────────┴──────────┴────────────────────┘
-```
-
-- Botão ativo tem indicador visual (linha/glow na cor de acento)
-- Botão de app abre aquele módulo na área do mapa (ou sobre ele)
-- Toque longo no botão de config → abre Quick Settings (drawer de cima para baixo)
+> **Removido.** A barra inferior fixa foi eliminada do design. Navegação entre módulos será definida separadamente (gesto de swipe, overlay contextual, ou outro mecanismo).
 
 ---
 

@@ -12,6 +12,16 @@ buildroot/dl/
 # Build artifacts do app Qt
 app/build*/
 app/.qt/
+src/hermes-app/build/
+src/elise/build/
+/build/
+/build-elise/
+
+# Claude Code local config
+.claude/
+
+# Build log
+build.log
 
 # Secrets — nunca commitar
 board/hermes-pi5/rootfs-overlay/etc/wpa_supplicant/wpa_supplicant-filled.conf

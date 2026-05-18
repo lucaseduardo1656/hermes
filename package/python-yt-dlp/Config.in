@@ -1,0 +1,8 @@
+config BR2_PACKAGE_PYTHON_YT_DLP
+	bool "python-yt-dlp"
+	help
+	  Command-line audio/video downloader with support for hundreds
+	  of media sites. Used by hermes-music to resolve direct media
+	  URLs for YouTube Music and SoundCloud.
+
+	  https://github.com/yt-dlp/yt-dlp

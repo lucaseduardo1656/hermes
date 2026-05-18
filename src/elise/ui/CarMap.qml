@@ -1,0 +1,459 @@
+import QtQuick
+import QtLocation
+import QtPositioning
+import Elise
+
+// Single source of truth for the car map. Owns:
+//   * Qt Location plugin (OSM raster + Nominatim geocode + OSRM routing)
+//   * Qt Positioning source (NMEA via serial, GPSD via socket if running)
+//   * the Map render with gestures, GPS pose marker, destination pin
+//     and route polyline
+//   * pure-JS helpers (geocode / setDestination / recenter) that the
+//     outer UI calls
+//
+// Default centre: Lagoa da Prata, MG until a real fix lands.
+Item {
+    id: root
+
+    // ── Public API ───────────────────────────────────────────────────────────
+    property bool interactive: true
+    property var  destination: null         // QtPositioning.coordinate or null
+
+    readonly property bool  hasDestination: destination !== null
+                                         && destination.isValid
+    readonly property real  routeDistanceM: _routes.count > 0
+                                              ? _routes.get(0).distance : 0
+    readonly property real  routeDurationS: _routes.count > 0
+                                              ? _routes.get(0).travelTime : 0
+
+    function recenter() {
+        // Recenter on GPS and snap the bearing back to north so the
+        // user isn't stuck looking at a rotated viewport.
+        _map.bearing = 0
+        if (_pos.position.coordinate.isValid)
+            _map.center = _pos.position.coordinate
+    }
+
+    function setDestination(coord) {
+        // Snapshot the current view as the route origin BEFORE the
+        // destination triggers a viewport fit — otherwise the next
+        // route query uses the destination as both endpoints (no
+        // real GPS yet) and OSRM rejects start==end.
+        _routeOrigin = _pos.position.coordinate.isValid
+                         ? _pos.position.coordinate
+                         : _map.center
+        destination = coord
+    }
+
+    // The point we use as "where the car is" for routing. Real GPS
+    // when valid, else the map centre at the moment a destination is
+    // chosen (so the user can pan to where they are before searching).
+    property var _routeOrigin: null
+
+    function clearDestination() {
+        destination = null
+        Nav.update(false, "", "", "straight", 0)
+    }
+
+    // Async geocode wrapper. cb receives [{address, coordinate}, ...].
+    // Queues a single follow-up request if the user keeps typing while
+    // a previous lookup is still loading — calling update() mid-flight
+    // crashes the QML engine on some Qt 6 builds.
+    function geocode(query, cb) {
+        if (_geocoder.status === GeocodeModel.Loading) {
+            _geocoder._pending  = cb
+            _geocoder._queued   = query
+            return
+        }
+        _geocoder._pending = cb
+        _geocoder._queued  = ""
+        _geocoder.query    = query
+        _geocoder.update()
+    }
+
+    // ── Positioning ──────────────────────────────────────────────────────────
+    PositionSource {
+        id: _pos
+        updateInterval: 1000
+        active: true
+        // The `nmea` plugin (installed by qt6positioning) auto-detects
+        // a NMEA stream on /dev/serial0 once a GPS HAT is wired. Until
+        // then position.coordinate is invalid and the GPS marker stays
+        // hidden — the map itself still shows.
+    }
+
+    // ── Plugin (single instance shared by Map + Geocode + Route) ─────────────
+    Plugin {
+        id: _osm
+        name: "osm"
+        PluginParameter { name: "osm.useragent"
+                          value: "Elise/0.1 hermes-infotainment" }
+        // The OSM plugin polls https://maps-redirect.qt.io for a list
+        // of community providers on startup; that URL is slow and
+        // can hang the first map render. We pin the canonical hosts
+        // directly and skip the lookup.
+        PluginParameter { name: "osm.mapping.providersrepository.disabled"
+                          value: "true" }
+        PluginParameter { name: "osm.mapping.host"
+                          value: "https://tile.openstreetmap.org/" }
+        PluginParameter { name: "osm.mapping.highdpi_tiles"
+                          value: "true" }
+        // Routing + geocoding hosts left as Qt's defaults (OSRM demo +
+        // Nominatim). Overriding `osm.routing.host` clobbers the
+        // `route/v1/<profile>/` path that the plugin appends, so the
+        // resulting URL hits the OSRM root and 400s silently.
+    }
+
+    // ── Geocoding ────────────────────────────────────────────────────────────
+    GeocodeModel {
+        id: _geocoder
+        plugin: _osm
+        autoUpdate: false
+        limit: 5
+        property var    _pending: null
+        property string _queued:  ""
+
+        onStatusChanged: {
+            if (status === GeocodeModel.Ready) {
+                const cb = _pending; _pending = null
+                const out = []
+                for (let i = 0; i < count; ++i) {
+                    const loc = get(i)
+                    out.push({
+                        address:    loc.address.text,
+                        coordinate: loc.coordinate
+                    })
+                }
+                if (cb) cb(out)
+            } else if (status === GeocodeModel.Error) {
+                const cb = _pending; _pending = null
+                if (cb) cb([])
+            }
+            // Drain queued follow-up if the user typed more characters
+            // while we were busy.
+            if (status !== GeocodeModel.Loading && _queued !== "") {
+                const q = _queued; _queued = ""
+                root.geocode(q, _pending)
+            }
+        }
+    }
+
+    // ── Routing ──────────────────────────────────────────────────────────────
+    // RouteQuery defaults are CarTravel + FastestRoute — we deliberately
+    // omit the enum bindings, Qt 6's QML namespacing leaves the enum
+    // names undefined and assigning [undefined] zeroes the flags.
+    RouteQuery { id: _routeQuery }
+
+    RouteModel {
+        id: _routes
+        plugin: _osm
+        query: _routeQuery
+        autoUpdate: false
+    }
+
+    Timer {
+        id: _routeDebounce
+        interval: 1500
+        repeat: false
+        onTriggered: {
+            if (!root.hasDestination) return
+            const here = _pos.position.coordinate.isValid
+                           ? _pos.position.coordinate
+                           : (_routeOrigin || _map.center)
+            if (here.latitude === root.destination.latitude
+                && here.longitude === root.destination.longitude) {
+                // Routing demands distinct start/end. Skip — the user
+                // hasn't moved away from the destination yet.
+                return
+            }
+            _routeQuery.clearWaypoints()
+            _routeQuery.addWaypoint(here)
+            _routeQuery.addWaypoint(root.destination)
+            _routes.update()
+        }
+    }
+
+    onDestinationChanged: _routeDebounce.restart()
+    Connections {
+        target: _pos
+        function onPositionChanged() {
+            if (root.hasDestination) {
+                _routeDebounce.restart()
+                _recomputeManeuver()
+            }
+        }
+    }
+
+    Connections {
+        target: _routes
+        function onCountChanged() {
+            if (_routes.count > 0) {
+                const r = _routes.get(0)
+                if (r && r.path && r.path.length > 0)
+                    _fitRouteToViewport(r.path)
+            }
+            _recomputeManeuver()
+        }
+    }
+
+    // Frame the whole route polyline in the viewport. We do the
+    // bounding box math by hand because QtPositioning.shapeToRectangle
+    // wraps a GeoPath into a too-tight rectangle on some Qt 6 builds
+    // and fitViewportToGeoShape ends up centring on a single endpoint.
+    function _fitRouteToViewport(path) {
+        let minLat =  90, maxLat = -90, minLon =  180, maxLon = -180
+        for (let i = 0; i < path.length; ++i) {
+            const c = path[i]
+            if (c.latitude  < minLat) minLat = c.latitude
+            if (c.latitude  > maxLat) maxLat = c.latitude
+            if (c.longitude < minLon) minLon = c.longitude
+            if (c.longitude > maxLon) maxLon = c.longitude
+        }
+        const rect = QtPositioning.rectangle(
+            QtPositioning.coordinate(maxLat, minLon),
+            QtPositioning.coordinate(minLat, maxLon))
+        _map.fitViewportToGeoShape(rect, 80)
+    }
+
+    // ── Turn-by-turn maneuver tracking ───────────────────────────────────────
+    // Walks the first route's segment list, finds the maneuver closest
+    // ahead of the user's current position, and pushes its instruction
+    // / distance / direction to the global Nav controller. The
+    // NavigationOverlay banner up top binds to Nav.
+    function _recomputeManeuver() {
+        if (!root.hasDestination || _routes.count === 0) {
+            Nav.update(false, "", "", "straight", 0)
+            return
+        }
+        const route = _routes.get(0)
+        const here  = _pos.position.coordinate.isValid
+                        ? _pos.position.coordinate
+                        : _map.center
+        if (!route || !route.segments || route.segments.length === 0) {
+            Nav.update(false, "", "", "straight", 0)
+            return
+        }
+
+        // Pick the maneuver with the smallest forward distance.
+        let bestIdx  = -1
+        let bestDist = Number.POSITIVE_INFINITY
+        for (let i = 0; i < route.segments.length; ++i) {
+            const m = route.segments[i].maneuver
+            if (!m || !m.valid) continue
+            const d = here.distanceTo(m.position)
+            if (d < bestDist) {
+                bestDist = d
+                bestIdx  = i
+            }
+        }
+        if (bestIdx < 0) {
+            Nav.update(false, "", "", "straight", 0)
+            return
+        }
+        const m = route.segments[bestIdx].maneuver
+        const dist = bestDist >= 1000
+                       ? (bestDist / 1000).toFixed(1) + " km"
+                       : Math.round(bestDist) + " m"
+        Nav.update(true, m.instructionText, dist,
+                   _maneuverDir(m.direction),
+                   here.azimuthTo(m.position))
+    }
+
+    // Map QGeoManeuver::InstructionDirection (Qt enum int) to the
+    // overlay's icon key (left/right/straight).
+    function _maneuverDir(d) {
+        // 0 NoDirection · 1 DirectionForward · 2 DirectionBearRight ·
+        // 3 DirectionLightRight · 4 DirectionRight · 5 DirectionHardRight ·
+        // 6 DirectionUTurnRight · 7 DirectionUTurnLeft · 8 DirectionHardLeft ·
+        // 9 DirectionLeft · 10 DirectionLightLeft · 11 DirectionBearLeft
+        if (d >= 2 && d <= 6) return "right"
+        if (d >= 7 && d <= 11) return "left"
+        return "straight"
+    }
+
+    // ── Map ──────────────────────────────────────────────────────────────────
+    Map {
+        id: _map
+        anchors.fill: parent
+        plugin: _osm
+        center: QtPositioning.coordinate(-20.0294, -45.5390)   // Lagoa da Prata, MG
+        zoomLevel: 14
+        copyrightsVisible: false        // we render our own attribution
+        activeMapType: supportedMapTypes.length > 0
+                         ? supportedMapTypes[0] : null
+
+        // ── Gestures ─────────────────────────────────────────────────────────
+        // Bare Map has no built-in gestures in Qt 6; wire them with the
+        // modern Pointer Handlers. Each handler tracks a delta against
+        // its own previous frame so the pan is responsive without
+        // multiplying-by-total-translation jumps.
+        DragHandler {
+            id: _drag
+            target: null
+            enabled: root.interactive
+            property real _lastX: 0
+            property real _lastY: 0
+            onActiveChanged: {
+                if (active) { _lastX = 0; _lastY = 0 }
+            }
+            onTranslationChanged: {
+                const dx = translation.x - _lastX
+                const dy = translation.y - _lastY
+                _lastX = translation.x
+                _lastY = translation.y
+                _map.pan(-dx, -dy)
+            }
+        }
+
+        PinchHandler {
+            target: null
+            enabled: root.interactive
+            // Two-finger gesture drives both zoom and bearing — Qt's
+            // PinchHandler reports activeScale (>0) and activeRotation
+            // (degrees) during the same gesture.
+            property real _startZoom:    14
+            property real _startBearing: 0
+            onActiveChanged: {
+                if (active) {
+                    _startZoom    = _map.zoomLevel
+                    _startBearing = _map.bearing
+                }
+            }
+            onActiveScaleChanged: {
+                _map.zoomLevel = Math.max(2, Math.min(19,
+                    _startZoom + Math.log(activeScale) / Math.log(2)))
+            }
+            onActiveRotationChanged: {
+                // Finger rotates clockwise → map content should follow
+                // clockwise, which means the camera bearing decreases.
+                // Subtract to keep gesture and rendered direction aligned.
+                let b = _startBearing - activeRotation
+                while (b < 0)   b += 360
+                while (b > 360) b -= 360
+                _map.bearing = b
+            }
+        }
+
+        WheelHandler {
+            enabled: root.interactive
+            // angleDelta.y is 120 per notch on most mice; one notch
+            // moves a third of a zoom level — feels close to Google
+            // Maps' wheel cadence.
+            onWheel: (ev) => {
+                _map.zoomLevel = Math.max(2, Math.min(19,
+                    _map.zoomLevel + ev.angleDelta.y / 360))
+            }
+        }
+
+        TapHandler {
+            enabled: root.interactive
+            gesturePolicy: TapHandler.ReleaseWithinBounds
+            onDoubleTapped: _map.zoomLevel = Math.min(19, _map.zoomLevel + 1)
+        }
+
+
+        // ── GPS pose marker ──────────────────────────────────────────────────
+        MapQuickItem {
+            visible: _pos.position.coordinate.isValid
+            coordinate: _pos.position.coordinate
+            anchorPoint.x: 14
+            anchorPoint.y: 14
+            sourceItem: Item {
+                width: 28; height: 28
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: System.accent
+                    border.color: "#000000"
+                    border.width: 3
+                }
+                // Heading wedge — only when actually moving.
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.top; anchors.bottomMargin: -4
+                    width: 6; height: 14
+                    radius: 2
+                    color: System.accent
+                    rotation: _pos.position.directionValid
+                                ? _pos.position.direction : 0
+                    visible: _pos.position.speedValid
+                          && _pos.position.speed > 0.3
+                }
+            }
+        }
+
+        // ── Destination pin ──────────────────────────────────────────────────
+        MapQuickItem {
+            visible: root.hasDestination
+            coordinate: root.destination || QtPositioning.coordinate(0, 0)
+            anchorPoint.x: 18
+            anchorPoint.y: 44
+            sourceItem: Item {
+                width: 36; height: 44
+
+                Rectangle {       // shadow under tip
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom; anchors.bottomMargin: -2
+                    width: 14; height: 5
+                    radius: height / 2
+                    color: "#40000000"
+                }
+                Rectangle {       // tip
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top; anchors.topMargin: 24
+                    width: 14; height: 14
+                    rotation: 45
+                    color: System.accent
+                    border.color: "#FFFFFF"
+                    border.width: 3
+                    z: -1
+                }
+                Rectangle {       // head
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                    width: 36; height: 36
+                    radius: 18
+                    color: System.accent
+                    border.color: "#FFFFFF"
+                    border.width: 3
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 12; height: 12
+                        radius: 6
+                        color: "#FFFFFF"
+                    }
+                }
+            }
+        }
+
+        // ── Route polyline ───────────────────────────────────────────────────
+        MapItemView {
+            model: _routes
+            delegate: MapRoute {
+                route: routeData
+                line.color: System.accent
+                line.width: 6
+                opacity: 0.85
+            }
+        }
+    }
+
+    // ── OSM attribution ──────────────────────────────────────────────────────
+    Text {
+        anchors { right: parent.right; bottom: parent.bottom
+                  rightMargin: 6; bottomMargin: 4 }
+        text: "© OpenStreetMap"
+        color: "#FFFFFF"
+        opacity: 0.7
+        font.pixelSize: 10
+        style: Text.Outline
+        styleColor: "#000000"
+    }
+
+    // Tap blocker when something is overlaying the map.
+    MouseArea {
+        anchors.fill: parent
+        enabled: !root.interactive
+        propagateComposedEvents: false
+    }
+}

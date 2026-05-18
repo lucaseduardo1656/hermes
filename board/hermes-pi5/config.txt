@@ -1,33 +1,7 @@
 # Hermes — Raspberry Pi 5 firmware config
 
-# Habilita UART para debug (remover em produção)
-enable_uart=1
-uart_2ndstage=1
+kernel=Image
+disable_overscan=1
 
-# Display — touch HDMI
-hdmi_force_hotplug=1
-hdmi_drive=2
-hdmi_group=2
-hdmi_mode=87
-hdmi_cvt=1024 600 60 6 0 0 0
-
-# GPU memory (VideoCore VII)
-gpu_mem=256
-
-# Overclocking leve (estável no Pi 5)
-# arm_freq=2800
-# Descomente quando o sistema estiver estável
-
-# Desabilitar splash de boot do firmware
-disable_splash=1
-
-# Iniciar kernel 64-bit
-arm_64bit=1
-
-# Device Tree Overlays
-dtoverlay=vc4-kms-v3d
-dtoverlay=dwc2,dr_mode=host
-
-# Para touchscreen (ajustar conforme driver do painel)
-# dtoverlay=goodix
-# dtparam=sizex=1024,sizey=600
+# Display — DRM/KMS para Wayland/Cage no RPi5
+dtoverlay=vc4-kms-v3d-pi5

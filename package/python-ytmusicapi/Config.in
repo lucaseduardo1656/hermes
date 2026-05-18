@@ -1,0 +1,8 @@
+config BR2_PACKAGE_PYTHON_YTMUSICAPI
+	bool "python-ytmusicapi"
+	select BR2_PACKAGE_PYTHON_REQUESTS
+	help
+	  Unofficial YouTube Music API for Python. Used by hermes-music
+	  for search, charts, and home-feed sections.
+
+	  https://github.com/sigma67/ytmusicapi

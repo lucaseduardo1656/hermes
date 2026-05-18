@@ -1,0 +1,9 @@
+config BR2_PACKAGE_HERMES_IPC
+	bool "hermes-ipc"
+	help
+	  Shared D-Bus interface definitions for the Hermes automotive
+	  stack. Installs interface XML files and a CMake module
+	  (HermesIpc) used by daemons and clients to generate sdbus-c++
+	  proxy/adaptor stubs at build time.
+
+	  https://github.com/lucaseduardo1656/hermes-ipc

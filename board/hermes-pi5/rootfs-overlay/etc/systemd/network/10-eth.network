@@ -1,0 +1,8 @@
+[Match]
+Name=end0 eth0
+
+[Network]
+DHCP=yes
+
+[DHCP]
+RouteMetric=100

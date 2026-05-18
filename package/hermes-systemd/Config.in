@@ -1,0 +1,18 @@
+config BR2_PACKAGE_HERMES_SYSTEMD
+	bool "hermes-systemd"
+	depends on BR2_INSTALL_LIBSTDCPP
+	depends on BR2_PACKAGE_SYSTEMD
+	depends on BR2_TOOLCHAIN_GCC_AT_LEAST_8 # C++20
+	select BR2_PACKAGE_SDBUS_CPP
+	select BR2_PACKAGE_HERMES_IPC
+	help
+	  Hermes system-level daemon. Owns org.hermes.System1 on the
+	  D-Bus system bus and exposes hostname, uptime, OS version,
+	  storage usage, plus privileged actions (reboot, power-off,
+	  set-hostname).
+
+	  https://github.com/lucaseduardo1656/hermes-systemd
+
+comment "hermes-systemd needs systemd and a toolchain w/ C++20"
+	depends on !BR2_INSTALL_LIBSTDCPP || !BR2_PACKAGE_SYSTEMD || \
+		!BR2_TOOLCHAIN_GCC_AT_LEAST_8

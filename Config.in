@@ -1,2 +1,10 @@
 config BR2_EXTERNAL_HERMES_PATH
 	string
+
+source "$BR2_EXTERNAL_HERMES_PATH/package/elise/Config.in"
+source "$BR2_EXTERNAL_HERMES_PATH/package/hermes-music/Config.in"
+source "$BR2_EXTERNAL_HERMES_PATH/package/hermes-ipc/Config.in"
+source "$BR2_EXTERNAL_HERMES_PATH/package/hermes-systemd/Config.in"
+source "$BR2_EXTERNAL_HERMES_PATH/package/python-spotipy/Config.in"
+source "$BR2_EXTERNAL_HERMES_PATH/package/python-yt-dlp/Config.in"
+source "$BR2_EXTERNAL_HERMES_PATH/package/python-ytmusicapi/Config.in"

@@ -1,0 +1,16 @@
+[Unit]
+Description=Hermes Music Daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/usr/share/hermes-music
+ExecStart=/usr/share/hermes-music/hermes-music
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
