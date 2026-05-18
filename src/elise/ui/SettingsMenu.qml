@@ -91,6 +91,11 @@ Menu {
                 onClicked: root.activePage = "bluetooth"
             }
             SettingsSidebarItem {
+                icon: "qrc:/icons/download.svg";    label: "Mapas offline"
+                active: root.activePage === "mapasOffline"
+                onClicked: root.activePage = "mapasOffline"
+            }
+            SettingsSidebarItem {
                 icon: "qrc:/icons/monitor.svg";     label: "Interface"
                 active: root.activePage === "interface"
                 onClicked: root.activePage = "interface"
@@ -123,6 +128,7 @@ Menu {
             case "veiculo":        return _veiculoPage
             case "conectividade":  return _conectividadePage
             case "bluetooth":      return _bluetoothPage
+            case "mapasOffline":   return _mapasOfflinePage
             case "interface":      return _interfacePage
             case "som":            return _somPage
             case "sistema":        return _sistemaPage
@@ -135,6 +141,7 @@ Menu {
     Component { id: _veiculoPage;       SettingsPageVeiculo       {} }
     Component { id: _conectividadePage; SettingsPageConectividade {} }
     Component { id: _bluetoothPage;     SettingsPageBluetooth     {} }
+    Component { id: _mapasOfflinePage;  SettingsPageMapasOffline  {} }
     Component { id: _interfacePage;     SettingsPageInterface     {} }
     Component { id: _somPage;           SettingsPageSom           {} }
     Component { id: _sistemaPage;       SettingsPageSistema       {} }

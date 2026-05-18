@@ -15,6 +15,13 @@ import Elise
 Item {
     id: root
 
+    // Register with the global bridge so pages outside Main (offline
+    // maps settings, navigation overlays, etc.) can call into us
+    // without having to thread a property through every Loader.
+    Component.onCompleted:  MapBridge.current = root
+    Component.onDestruction: if (MapBridge.current === root)
+                                MapBridge.current = null
+
     // ── Public API ───────────────────────────────────────────────────────────
     property bool interactive: true
     property var  destination: null         // QtPositioning.coordinate or null
@@ -26,6 +33,10 @@ Item {
 
     readonly property bool  hasDestination: destination !== null
                                          && destination.isValid
+    // Map bearing exposed so a floating compass can mirror it.
+    readonly property real  bearing: _map ? _map.bearing : 0
+
+    function resetBearing() { _map.bearing = 0 }
     readonly property real  routeDistanceM: _routes.count > 0
                                               ? _routes.get(0).distance : 0
     readonly property real  routeDurationS: _routes.count > 0
@@ -58,6 +69,68 @@ Item {
     function clearDestination() {
         destination = null
         Nav.update(false, "", "", "straight", 0)
+    }
+
+    // Bounding box of what the user can currently see. Used by the
+    // offline-maps page to capture the visible region for caching.
+    function visibleBounds() {
+        const tl = _map.toCoordinate(Qt.point(0, 0), false)
+        const br = _map.toCoordinate(Qt.point(_map.width, _map.height), false)
+        return {
+            north: tl.latitude,
+            south: br.latitude,
+            west:  tl.longitude,
+            east:  br.longitude,
+            zoom:  _map.zoomLevel
+        }
+    }
+
+    // Walk a bbox at the given zoom level, panning the viewport over
+    // a coarse grid so MapLibre fetches and caches every tile. The
+    // disk cache (maplibre.cache.*) then keeps them around for
+    // offline use.
+    //
+    // We don't try to drive minZoom→maxZoom in one go — it'd thrash
+    // the renderer. The caller passes one zoom level; multiple
+    // zooms = call multiple times in sequence from QML.
+    property var _preloadQueue: []
+    property bool _preloadActive: false
+    Timer {
+        id: _preloadTick
+        interval: 350
+        repeat: true
+        onTriggered: {
+            if (root._preloadQueue.length === 0) {
+                running = false
+                root._preloadActive = false
+                root.preloadDone()
+                return
+            }
+            const next = root._preloadQueue.shift()
+            _map.center = QtPositioning.coordinate(next.lat, next.lon)
+            _map.zoomLevel = next.zoom
+        }
+    }
+    signal preloadProgress(int done, int total)
+    signal preloadDone()
+
+    function preloadRegion(north, south, east, west, minZoom, maxZoom) {
+        _preloadQueue = []
+        // For each zoom level, sample center points spaced one
+        // viewport apart (≈360° / 2^zoom of lon for a 1 tile width
+        // viewport, scaled by viewport tile count).
+        for (let z = minZoom; z <= maxZoom; ++z) {
+            // Step ≈ size of one tile in degrees at this zoom.
+            const step = 360 / Math.pow(2, z)
+            for (let lat = south; lat <= north; lat += step) {
+                for (let lon = west; lon <= east; lon += step) {
+                    _preloadQueue.push({ lat: lat, lon: lon, zoom: z })
+                }
+            }
+        }
+        if (_preloadQueue.length === 0) return
+        _preloadActive = true
+        _preloadTick.start()
     }
 
     // Async geocode wrapper. cb receives [{address, coordinate}, ...].
@@ -101,6 +174,23 @@ Item {
             name: "maplibre.map.styles"
             value: root.styleUrl
         }
+        // Persistent on-disk cache. Tiles, glyphs and sprites visited
+        // here stay around for the next boot, so once a region has
+        // been browsed it works offline. Half a gig is plenty for a
+        // mid-sized state at z14..16 (≈40k tiles).
+        PluginParameter {
+            name: "maplibre.cache.directory"
+            value: "/var/cache/elise-maplibre"
+        }
+        PluginParameter {
+            name: "maplibre.cache.size"
+            value: "536870912"   // 512 MiB
+        }
+        // maplibre.cache.memory is intentionally absent — the plugin
+        // code unconditionally sets cache to `:memory:` if the param
+        // is present (regardless of value), and only overrides it
+        // back to disk if mkpath succeeds. Leaving it out makes the
+        // disk-backed path the default.
         // OSRM + Nominatim still come from Qt's OSM-side defaults —
         // maplibre plugin only handles map rendering. We register a
         // second Plugin for routing/geocoding.
@@ -191,10 +281,11 @@ Item {
     Connections {
         target: _pos
         function onPositionChanged() {
-            if (root.hasDestination) {
-                _routeDebounce.restart()
-                _recomputeManeuver()
-            }
+            // Keep the active maneuver in sync with the user's
+            // position, but don't re-issue the route query — that
+            // would flip the polyline back to map.center the moment
+            // the positionpoll plugin emits its initial reading.
+            if (root.hasDestination) _recomputeManeuver()
         }
     }
 

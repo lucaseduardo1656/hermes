@@ -5,6 +5,7 @@
 #include "NetworkController.h"
 #include "BluetoothController.h"
 #include "AppearanceController.h"
+#include "OfflineMapsController.h"
 
 // Root facade for system-wide settings. Owns and exposes one sub-controller
 // per concern (system, network, audio, …) so QML can bind via:
@@ -19,19 +20,22 @@ class SettingsController : public QObject {
     Q_PROPERTY(SystemInfoController *sys        READ sys        CONSTANT)
     Q_PROPERTY(NetworkController    *network    READ network    CONSTANT)
     Q_PROPERTY(BluetoothController  *bluetooth  READ bluetooth  CONSTANT)
-    Q_PROPERTY(AppearanceController *appearance READ appearance CONSTANT)
+    Q_PROPERTY(AppearanceController  *appearance  READ appearance  CONSTANT)
+    Q_PROPERTY(OfflineMapsController *offlineMaps READ offlineMaps CONSTANT)
 
 public:
     explicit SettingsController(QObject *parent = nullptr);
 
-    SystemInfoController *sys()        const { return m_sys; }
-    NetworkController    *network()    const { return m_network; }
-    BluetoothController  *bluetooth()  const { return m_bluetooth; }
-    AppearanceController *appearance() const { return m_appearance; }
+    SystemInfoController  *sys()         const { return m_sys; }
+    NetworkController     *network()     const { return m_network; }
+    BluetoothController   *bluetooth()   const { return m_bluetooth; }
+    AppearanceController  *appearance()  const { return m_appearance; }
+    OfflineMapsController *offlineMaps() const { return m_offlineMaps; }
 
 private:
-    SystemInfoController *m_sys;
-    NetworkController    *m_network;
-    BluetoothController  *m_bluetooth;
-    AppearanceController *m_appearance;
+    SystemInfoController  *m_sys;
+    NetworkController     *m_network;
+    BluetoothController   *m_bluetooth;
+    AppearanceController  *m_appearance;
+    OfflineMapsController *m_offlineMaps;
 };
