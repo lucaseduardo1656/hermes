@@ -35,6 +35,8 @@ qt_add_executable(elise
     core/settings/BluetoothController.cpp
     core/settings/AppearanceController.h
     core/settings/AppearanceController.cpp
+    core/settings/OfflineMapsController.h
+    core/settings/OfflineMapsController.cpp
 )
 
 set_source_files_properties(ui/Theme.qml PROPERTIES
@@ -44,6 +46,9 @@ set_source_files_properties(ui/Keyboard.qml PROPERTIES
     QT_QML_SINGLETON_TYPE TRUE
 )
 set_source_files_properties(ui/ActionSheet.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE TRUE
+)
+set_source_files_properties(ui/MapBridge.qml PROPERTIES
     QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -80,6 +85,8 @@ qt_add_qml_module(elise
         ui/KeyboardKey.qml
         ui/Keyboard.qml
         ui/ActionSheet.qml
+        ui/MapBridge.qml
+        ui/SettingsPageMapasOffline.qml
         ui/ActionSheetView.qml
         ui/TrackList.qml
         ui/TrackCarousel.qml
