@@ -1,17 +1,21 @@
 #pragma once
 #include <QObject>
 #include <QColor>
+#include <QSettings>
+#include <QVariantList>
 
 class SystemController : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(bool darkTheme  READ isDark  WRITE setDark  NOTIFY themeChanged)
+    Q_PROPERTY(QString accentKey READ accentKey WRITE setAccentKey NOTIFY themeChanged)
+    Q_PROPERTY(QVariantList accentOptions READ accentOptions CONSTANT)
 
     Q_PROPERTY(QColor background    READ background    NOTIFY themeChanged)
     Q_PROPERTY(QColor surface       READ surface       NOTIFY themeChanged)
     Q_PROPERTY(QColor surface2      READ surface2      NOTIFY themeChanged)
-    Q_PROPERTY(QColor accent        READ accent        CONSTANT)
-    Q_PROPERTY(QColor accentDim     READ accentDim     CONSTANT)
+    Q_PROPERTY(QColor accent        READ accent        NOTIFY themeChanged)
+    Q_PROPERTY(QColor accentDim     READ accentDim     NOTIFY themeChanged)
     Q_PROPERTY(QColor textPrimary   READ textPrimary   NOTIFY themeChanged)
     Q_PROPERTY(QColor textSecondary READ textSecondary NOTIFY themeChanged)
     Q_PROPERTY(QColor textMuted     READ textMuted     NOTIFY themeChanged)
@@ -28,12 +32,15 @@ public:
 
     bool isDark() const { return m_dark; }
     void setDark(bool dark);
+    QString accentKey()    const { return m_accentKey; }
+    void setAccentKey(const QString &k);
+    QVariantList accentOptions() const;
 
     QColor background()    const { return m_dark ? QColor("#0A0A0A") : QColor("#F5F5F5"); }
     QColor surface()       const { return m_dark ? QColor("#1C1C1C") : QColor("#FFFFFF"); }
     QColor surface2()      const { return m_dark ? QColor("#2A2A2A") : QColor("#EBEBEB"); }
-    QColor accent()        const { return QColor("#C6A75E"); }
-    QColor accentDim()     const { return QColor("#9A7F44"); }
+    QColor accent()        const;
+    QColor accentDim()     const;
     QColor textPrimary()   const { return m_dark ? QColor("#EAEAEA") : QColor("#111111"); }
     QColor textSecondary() const { return m_dark ? QColor("#909090") : QColor("#555555"); }
     QColor textMuted()     const { return m_dark ? QColor("#555555") : QColor("#999999"); }
@@ -49,5 +56,7 @@ signals:
     void themeChanged();
 
 private:
-    bool m_dark = true;
+    QSettings m_settings;
+    bool      m_dark      = true;
+    QString   m_accentKey;
 };

@@ -31,6 +31,8 @@ class PlayerController : public QObject {
     Q_PROPERTY(bool  daemonReady READ daemonReady NOTIFY daemonReadyChanged)
     Q_PROPERTY(bool  loading     READ loading     NOTIFY loadingChanged)
     Q_PROPERTY(QVariantMap sources READ sources   NOTIFY sourcesChanged)
+    Q_PROPERTY(bool  liked       READ liked       NOTIFY likedChanged)
+    Q_PROPERTY(QString trackId   READ trackId     NOTIFY trackChanged)
 
 public:
     explicit PlayerController(QObject *parent = nullptr);
@@ -49,6 +51,8 @@ public:
     bool   daemonReady()  const { return m_daemonReady; }
     bool   loading()      const { return m_loading; }
     QVariantMap sources() const { return m_sources; }
+    bool   liked()        const { return m_liked; }
+    QString trackId()     const { return m_trackId; }
 
 public slots:
     void togglePlay();
@@ -58,6 +62,10 @@ public slots:
 
     void playTrack(const QVariant &track);
     void playQueue(const QList<QVariant> &tracks, int index = 0);
+    void toggleFavorite();
+    // Apply an mpv `af` filter string live. Empty string clears all filters.
+    // Called from main.cpp when AudioController::eqPresetChanged fires.
+    void setAudioFilter(const QString &afString);
     // Stop mpv, drop the queue, blank the now-playing track. Used by
     // the player card's close button — the auto-hide rule in Main.qml
     // keys off trackTitle being empty.
@@ -78,6 +86,7 @@ signals:
     void daemonReadyChanged();
     void loadingChanged();
     void sourcesChanged();
+    void likedChanged();
 
     void tracksLoaded(QList<QVariant> tracks, QString context);
     // Emitted on every successful /home response. `replace=true` means the
@@ -92,6 +101,7 @@ private:
     void advanceQueue(int delta);
     void setTrack(const QVariant &t);
     void setLoading(bool v);
+    void checkLiked();
 
     // Drain queued mpv events on the Qt thread. Called from a queued slot
     // dispatched by the libmpv wakeup callback (which runs on mpv's thread).
@@ -128,6 +138,8 @@ private:
     bool m_homeLoading  = false; // in-flight /home request guard
     bool m_daemonReady = false;
     bool m_loading     = false;
+    bool m_liked       = false;
+    QString m_trackId;
     QVariantMap m_sources;
 
     Q_INVOKABLE void _mpvWakeupQueued();   // entry point for queued wakeups

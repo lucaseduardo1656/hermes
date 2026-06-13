@@ -38,6 +38,8 @@ class NetworkController : public QObject {
     Q_PROPERTY(QString      currentSsid      READ currentSsid      NOTIFY changed)
     Q_PROPERTY(QString      connectingSsid   READ connectingSsid   NOTIFY changed)
     Q_PROPERTY(QString      lastError        READ lastError        NOTIFY changed)
+    Q_PROPERTY(QString      ipAddress        READ ipAddress        NOTIFY changed)
+    Q_PROPERTY(bool         scanning         READ scanning         NOTIFY changed)
     Q_PROPERTY(QVariantList networks         READ networks         NOTIFY networksChanged)
     Q_PROPERTY(bool         bluetoothPowered READ bluetoothPowered NOTIFY changed)
 
@@ -54,6 +56,8 @@ public:
     QString      currentSsid()      const { return m_currentSsid; }
     QString      connectingSsid()   const { return m_connectingSsid; }
     QString      lastError()        const { return m_lastError; }
+    QString      ipAddress()        const { return m_ipAddress; }
+    bool         scanning()         const { return m_scanning; }
     QVariantList networks()         const { return m_networks; }
     bool         bluetoothPowered() const { return false; }
 
@@ -75,6 +79,7 @@ private:
     void connect();
     void rebuildNetworks();
     void refreshState();
+    QString readIfaceIp(const char *name) const;
     QString findSavedNetworkPath(const QString &ssid) const;
     QString addNetwork(const QString &ssid, const QString &psk);   // returns network path
     void selectNetworkPath(const QString &path);
@@ -88,6 +93,9 @@ private:
     QString m_currentSsid;
     QString m_connectingSsid;    // SSID currently being attempted; "" when idle
     QString m_lastError;
+    QString m_ipAddress;
+    bool    m_scanning = false;
     bool    m_wifiPowered = false;
+    QTimer  m_ipPoll;
     QVariantList m_networks;
 };

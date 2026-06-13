@@ -1,7 +1,7 @@
 import QtQuick
 import Elise
 
-// Page: Interface — tema, cor, tipografia, densidade, animações.
+// Page: Interface — tema, cor de destaque, animações, mapa.
 Flickable {
     id: root
     contentWidth:  width
@@ -25,7 +25,23 @@ Flickable {
                 checked: System.darkTheme
                 onToggled: (v) => System.darkTheme = v
             }
-            SettingsAction { label: "Cor de destaque";    sublabel: "Dourado Elise" }
+            SettingsAction {
+                label: "Cor de destaque"
+                sublabel: {
+                    const cur = System.accentKey
+                    const opts = System.accentOptions
+                    for (let i = 0; i < opts.length; ++i)
+                        if (opts[i].key === cur) return opts[i].label
+                    return cur
+                }
+                onTriggered: ActionSheet.show({
+                    title: "Cor de destaque",
+                    items: System.accentOptions.map(o => ({
+                        label: o.label,
+                        onSelected: function() { System.accentKey = o.key }
+                    }))
+                })
+            }
             SettingsAction { label: "Tamanho da fonte";   sublabel: "Padrão" }
             SettingsAction { label: "Densidade do layout"; sublabel: "Confortável" }
         }
@@ -42,23 +58,24 @@ Flickable {
                         if (opts[i].key === cur) return opts[i].label
                     return cur
                 }
-                onTriggered: {
-                    const items = Settings.appearance.mapStyleOptions.map(o => ({
+                onTriggered: ActionSheet.show({
+                    title: "Estilo do mapa",
+                    items: Settings.appearance.mapStyleOptions.map(o => ({
                         label: o.label,
-                        onSelected: function() {
-                            Settings.appearance.setMapStyle(o.key)
-                        }
+                        onSelected: function() { Settings.appearance.setMapStyle(o.key) }
                     }))
-                    ActionSheet.show({ title: "Estilo do mapa", items: items })
-                }
+                })
             }
         }
 
         SettingsCard {
             title: "Movimento"
 
-            SettingsToggle { label: "Animações";             checked: true }
-            SettingsToggle { label: "Reduzir transparência"; checked: false }
+            SettingsToggle {
+                label: "Animações"
+                checked: Settings.appearance.animationsEnabled
+                onToggled: (v) => Settings.appearance.setAnimationsEnabled(v)
+            }
         }
     }
 }

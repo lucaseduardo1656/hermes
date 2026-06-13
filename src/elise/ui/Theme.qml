@@ -38,10 +38,12 @@ QtObject {
     readonly property int iconXL:    32
 
     // ── Animation durations (ms) ──────────────────────────────────────────────
-    readonly property int durFast:    150
-    readonly property int durNormal:  220
-    readonly property int durSlow:    260
-    readonly property int durSlower:  300
+    // Zero when the user disables animations in Settings → Interface.
+    readonly property bool _anim:     Settings.appearance.animationsEnabled
+    readonly property int durFast:    _anim ? 150 : 0
+    readonly property int durNormal:  _anim ? 220 : 0
+    readonly property int durSlow:    _anim ? 260 : 0
+    readonly property int durSlower:  _anim ? 300 : 0
 
     // ── Standard tappable sizes ───────────────────────────────────────────────
     readonly property int btnSmall:   36

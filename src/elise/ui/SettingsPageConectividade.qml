@@ -1,10 +1,10 @@
 import QtQuick
 import Elise
 
-// Page: Conectividade — Wi-Fi (top-level), Bluetooth (TODO), Hotspot (TODO).
+// Page: Conectividade — Wi-Fi.
 //
 // Two-state internal router:
-//   * "main"  — overview card with toggle + Conectado info + Redes link
+//   * "main"  — hero status card + toggle + Redes link
 //   * "list"  — full list of available networks (SettingsPageWifiList)
 //
 // Password input is delegated to the global `Keyboard` singleton (mounted
@@ -40,12 +40,6 @@ Item {
                          onSelected: function() { Settings.network.forgetSsid(ssid) } })
         }
 
-        items.push({ label: "Detalhes",
-                     onSelected: function() {
-                         // Placeholder — future: open a detail page with
-                         // BSSID, freq, signal, security, IP, etc.
-                     } })
-
         ActionSheet.show({
             title: ssid + (n.security !== "none" ? "  ·  seguro" : "  ·  aberta"),
             items: items
@@ -58,7 +52,6 @@ Item {
             return
         }
         // Saved network → just reconnect, don't ask password again.
-        // (forget via long-press / dedicated UI when wrong psk needs reset.)
         if (n.saved) {
             Settings.network.reconnectSaved(n.ssid)
             return
@@ -75,6 +68,17 @@ Item {
                 Settings.network.connectWithPassphrase(ssid, psk)
             }
         })
+    }
+
+    // Pick the best matching strength for the active SSID from the scan
+    // list so the hero card's bars track signal quality live.
+    function _currentStrength() {
+        const cur = Settings.network.currentSsid
+        if (!cur) return 0
+        const list = Settings.network.networks
+        for (let i = 0; i < list.length; ++i)
+            if (list[i].ssid === cur) return list[i].strength
+        return 0
     }
 
     // ── Header (back arrow when in sub-view) ────────────────────────────
@@ -155,6 +159,101 @@ Item {
                 }
                 spacing: Theme.spaceXL
 
+                // ── Hero status card ────────────────────────────────────
+                // Big visual cue of where Wi-Fi stands: icon, SSID, IP.
+                // Color of the icon shifts with connection state so the
+                // user can read it without parsing text.
+                Rectangle {
+                    width: parent.width
+                    height: 132
+                    radius: Theme.radiusL
+                    color: System.surface
+                    border.color: System.border
+                    border.width: 1
+
+                    readonly property string _state: Settings.network.state
+                    readonly property bool _online: Settings.network.currentSsid !== ""
+                    readonly property bool _busy:
+                        Settings.network.connectingSsid !== ""
+
+                    Row {
+                        anchors.fill: parent
+                        anchors.margins: Theme.spaceXL
+                        spacing: Theme.spaceXL
+
+                        // Big wifi glyph + accent halo when online.
+                        Rectangle {
+                            width:  72; height: 72; radius: width / 2
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: parent.parent._online ? Qt.rgba(System.accent.r,
+                                                                    System.accent.g,
+                                                                    System.accent.b, 0.16)
+                                                          : Qt.rgba(1, 1, 1, 0.04)
+                            SvgIcon {
+                                anchors.centerIn: parent
+                                source: "qrc:/icons/wifi.svg"
+                                color:  parent.parent.parent._online
+                                            ? System.accent : System.textMuted
+                                size:   Theme.iconXL
+                            }
+                        }
+
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 72 - Theme.spaceXL
+                            spacing: 4
+
+                            Text {
+                                width: parent.width
+                                text: {
+                                    if (Settings.network.connectingSsid !== "")
+                                        return "Conectando a " + Settings.network.connectingSsid
+                                    if (Settings.network.currentSsid !== "")
+                                        return Settings.network.currentSsid
+                                    if (!Settings.network.wifiPowered)
+                                        return "Wi-Fi desligado"
+                                    return "Sem conexão"
+                                }
+                                elide: Text.ElideRight
+                                color: System.textPrimary
+                                font.pixelSize: Theme.fontTitle
+                                font.weight: Font.Medium
+                            }
+                            Text {
+                                width: parent.width
+                                visible: Settings.network.ipAddress !== ""
+                                         && Settings.network.currentSsid !== ""
+                                text: "IP " + Settings.network.ipAddress
+                                color: System.textSecondary
+                                font.pixelSize: Theme.fontBody
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                width: parent.width
+                                visible: Settings.network.lastError !== ""
+                                text: Settings.network.lastError
+                                color: System.danger
+                                font.pixelSize: Theme.fontCaption
+                                elide: Text.ElideRight
+                            }
+                            Row {
+                                spacing: Theme.spaceS
+                                visible: Settings.network.currentSsid !== ""
+                                SignalBars {
+                                    strength: root._currentStrength()
+                                    active: true
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Settings.network.state
+                                    color: System.textMuted
+                                    font.pixelSize: Theme.fontCaption
+                                }
+                            }
+                        }
+                    }
+                }
+
                 SettingsCard {
                     title: "Wi-Fi"
 
@@ -164,36 +263,21 @@ Item {
                         onToggled: (v) => Settings.network.setWifiPowered(v)
                     }
                     SettingsAction {
-                        label: {
-                            if (Settings.network.connectingSsid !== "")
-                                return "Conectando: " + Settings.network.connectingSsid
-                            if (Settings.network.currentSsid !== "")
-                                return "Conectado: " + Settings.network.currentSsid
-                            return "Desconectado"
-                        }
-                        sublabel: {
-                            if (Settings.network.lastError !== "")
-                                return Settings.network.lastError
-                            return Settings.network.state || "—"
-                        }
-                        onTriggered: {
-                            if (Settings.network.currentSsid !== "")
-                                Settings.network.disconnectCurrent()
-                        }
-                    }
-                    SettingsAction {
                         label: "Redes disponíveis"
-                        sublabel: Settings.network.networks.length + " visíveis"
+                        sublabel: Settings.network.scanning
+                                    ? "Procurando…"
+                                    : Settings.network.networks.length + " visíveis"
                         onTriggered: {
                             Settings.network.scanWifi()
                             root.view = "list"
                         }
                     }
-                }
-
-                SettingsCard {
-                    title: "Hotspot"
-                    SettingsAction { label: "Em breve" }
+                    SettingsAction {
+                        visible: Settings.network.currentSsid !== ""
+                        label: "Desconectar"
+                        sublabel: Settings.network.currentSsid
+                        onTriggered: Settings.network.disconnectCurrent()
+                    }
                 }
             }
         }
@@ -206,6 +290,4 @@ Item {
             onOptionsRequested: (n) => root._onNetworkOptions(n)
         }
     }
-
-    // Password input now lives in the global `Keyboard` overlay (Main.qml).
 }

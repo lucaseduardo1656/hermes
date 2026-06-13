@@ -132,6 +132,22 @@ async def get_liked_tracks(limit: int = 50) -> list[dict]:
     return [t for item in result.get("items", []) if (t := _track_to_dict(item))]
 
 
+async def like_track(raw_id: str) -> None:
+    sp = _client()
+    await asyncio.to_thread(lambda: sp.current_user_saved_tracks_add([raw_id]))
+
+
+async def unlike_track(raw_id: str) -> None:
+    sp = _client()
+    await asyncio.to_thread(lambda: sp.current_user_saved_tracks_delete([raw_id]))
+
+
+async def is_liked(raw_id: str) -> bool:
+    sp = _client()
+    result = await asyncio.to_thread(lambda: sp.current_user_saved_tracks_contains([raw_id]))
+    return bool(result and result[0])
+
+
 async def get_top_tracks(limit: int = 30) -> list[dict]:
     sp = _client()
     result = await asyncio.to_thread(

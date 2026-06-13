@@ -107,18 +107,54 @@ Item {
                 border.color: System.accent
                 border.width: Theme.borderHairline
 
-                Text {
+                // Buffer display with inline cursor.
+                // Clipped so overflow hides rather than pushes the eye icon.
+                Item {
                     anchors {
                         left: parent.left; leftMargin: Theme.spaceM
                         right: _eye.left; rightMargin: Theme.spaceM
                         verticalCenter: parent.verticalCenter
                     }
-                    text: (Keyboard.password && !root._revealPwd)
-                            ? "•".repeat(Keyboard.buffer.length)
-                            : Keyboard.buffer
-                    color: System.textPrimary
-                    font.pixelSize: Theme.fontTitle
-                    elide: Text.ElideLeft
+                    height: Theme.fontTitle + 4
+                    clip: true
+
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 0
+                        verticalAlignment: Row.AlignVCenter
+
+                        readonly property bool _masked:
+                            Keyboard.password && !root._revealPwd
+                        readonly property string _pre:
+                            _masked ? "•".repeat(Keyboard.cursorPos)
+                                    : Keyboard.buffer.slice(0, Keyboard.cursorPos)
+                        readonly property string _post:
+                            _masked ? "•".repeat(Keyboard.buffer.length - Keyboard.cursorPos)
+                                    : Keyboard.buffer.slice(Keyboard.cursorPos)
+
+                        Text {
+                            text:  parent._pre
+                            color: System.textPrimary
+                            font.pixelSize: Theme.fontTitle
+                        }
+                        Rectangle {
+                            width: 2; height: Theme.fontTitle + 2
+                            color: System.accent
+                            SequentialAnimation on opacity {
+                                loops: Animation.Infinite
+                                running: Keyboard.active
+                                PauseAnimation  { duration: 550 }
+                                NumberAnimation { to: 0; duration: 80 }
+                                PauseAnimation  { duration: 280 }
+                                NumberAnimation { to: 1; duration: 0 }
+                            }
+                        }
+                        Text {
+                            text:  parent._post
+                            color: System.textPrimary
+                            font.pixelSize: Theme.fontTitle
+                        }
+                    }
                 }
 
                 // Eye toggle — only when input is password.
@@ -313,13 +349,13 @@ Item {
                     text:  "<"
                     width: root._keyW; height: root._keyH
                     bgColor: root._pill; downColor: root._pillDn; textColor: root._txt
-                    onTapped: { /* caret-left — placeholder */ }
+                    onTapped: Keyboard.cursorLeft()
                 }
                 KeyboardKey {
                     text:  ">"
                     width: root._keyW; height: root._keyH
                     bgColor: root._pill; downColor: root._pillDn; textColor: root._txt
-                    onTapped: { /* caret-right — placeholder */ }
+                    onTapped: Keyboard.cursorRight()
                 }
             }
         }

@@ -28,6 +28,40 @@ AppearanceController::AppearanceController(QObject *parent)
     for (const auto &s : kStyles)
         if (m_mapStyle == QLatin1String(s.key)) { valid = true; break; }
     if (!valid) m_mapStyle = QString::fromLatin1(kDefault);
+
+    m_units      = m_settings.value(QStringLiteral("units"), m_units).toString();
+    if (m_units != QStringLiteral("metric") && m_units != QStringLiteral("imperial"))
+        m_units = QStringLiteral("metric");
+    m_timeFormat = m_settings.value(QStringLiteral("timeFormat"), m_timeFormat).toString();
+    if (m_timeFormat != QStringLiteral("24h") && m_timeFormat != QStringLiteral("12h"))
+        m_timeFormat = QStringLiteral("24h");
+    m_animationsEnabled = m_settings.value(QStringLiteral("animations"), true).toBool();
+}
+
+void AppearanceController::setUnits(const QString &u) {
+    if (u == m_units) return;
+    if (u != QStringLiteral("metric") && u != QStringLiteral("imperial")) return;
+    m_units = u;
+    m_settings.setValue(QStringLiteral("units"), u);
+    m_settings.sync();
+    emit unitsChanged();
+}
+
+void AppearanceController::setTimeFormat(const QString &f) {
+    if (f == m_timeFormat) return;
+    if (f != QStringLiteral("24h") && f != QStringLiteral("12h")) return;
+    m_timeFormat = f;
+    m_settings.setValue(QStringLiteral("timeFormat"), f);
+    m_settings.sync();
+    emit timeFormatChanged();
+}
+
+void AppearanceController::setAnimationsEnabled(bool on) {
+    if (on == m_animationsEnabled) return;
+    m_animationsEnabled = on;
+    m_settings.setValue(QStringLiteral("animations"), on);
+    m_settings.sync();
+    emit animationsEnabledChanged();
 }
 
 QString AppearanceController::mapStyleUrl() const {

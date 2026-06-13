@@ -382,9 +382,10 @@ Item {
                         onTapped: Player.next()
                     }
                     IconBtn {
-                        icon: "qrc:/icons/heart.svg"
-                        size: Theme.iconS
-                        // TODO: wire to Player.toggleFavorite() once exposed
+                        icon:  "qrc:/icons/heart.svg"
+                        size:  Theme.iconS
+                        color: Player.liked ? System.accent : System.textSecondary
+                        onTapped: Player.toggleFavorite()
                     }
                     // Manual refresh — re-fetches the home feed from the
                     // daemon. Always visible (not gated on empty state)
@@ -705,8 +706,9 @@ Item {
 
     // Square tappable icon button with subtle pressed-state background.
     component IconBtn: Item {
-        property url  icon
-        property real size: Theme.iconM
+        property url   icon
+        property real  size:  Theme.iconM
+        property color color: System.textSecondary
         signal tapped()
 
         width:  Theme.btnMedium
@@ -721,7 +723,7 @@ Item {
         SvgIcon {
             anchors.centerIn: parent
             source: parent.icon
-            color:  System.textSecondary
+            color:  parent.color
             size:   parent.size
         }
         MouseArea { id: _ia; anchors.fill: parent; onClicked: parent.tapped() }

@@ -78,6 +78,39 @@ Flickable {
         }
 
         SettingsCard {
+            title: "Preferências"
+
+            SettingsAction {
+                label: "Unidades"
+                sublabel: Settings.appearance.units === "imperial"
+                            ? "Imperial (mi/ft)" : "Métrico (km/m)"
+                onTriggered: ActionSheet.show({
+                    title: "Unidades",
+                    items: [
+                        { label: "Métrico (km/m)",   onSelected: function() {
+                            Settings.appearance.setUnits("metric") } },
+                        { label: "Imperial (mi/ft)", onSelected: function() {
+                            Settings.appearance.setUnits("imperial") } }
+                    ]
+                })
+            }
+            SettingsAction {
+                label: "Formato de hora"
+                sublabel: Settings.appearance.timeFormat === "12h"
+                            ? "12 horas" : "24 horas"
+                onTriggered: ActionSheet.show({
+                    title: "Formato de hora",
+                    items: [
+                        { label: "24 horas", onSelected: function() {
+                            Settings.appearance.setTimeFormat("24h") } },
+                        { label: "12 horas (AM/PM)", onSelected: function() {
+                            Settings.appearance.setTimeFormat("12h") } }
+                    ]
+                })
+            }
+        }
+
+        SettingsCard {
             SettingsAction {
                 label: "Reiniciar sistema"
                 onTriggered: Settings.sys.reboot()
