@@ -16,14 +16,15 @@ import QtQuick
 QtObject {
     id: root
 
-    property bool   active:   false
-    property string title:    ""
-    property string buffer:   ""
-    property bool   password: false
+    property bool   active:    false
+    property string title:     ""
+    property string buffer:    ""
+    property int    cursorPos: 0
+    property bool   password:  false
     // bare = no dim overlay and no floating modal card; only the
     // QWERTY tray docks at the bottom. The caller keeps showing its
     // own input surface, mirrored via the `buffer` property.
-    property bool   bare:     false
+    property bool   bare:      false
 
     // Callbacks (functions). Stored as `var` so JS closures can be assigned.
     property var _onSubmit: null
@@ -34,14 +35,24 @@ QtObject {
         password  = opts.password === true
         bare      = opts.bare === true
         buffer    = opts.initial  || ""
+        cursorPos = buffer.length
         _onSubmit = opts.onSubmit || null
         _onCancel = opts.onCancel || null
         active    = true
     }
 
-    function append(c)   { buffer += c }
-    function backspace() { buffer = buffer.slice(0, -1) }
-    function clear()     { buffer = "" }
+    function append(c) {
+        buffer    = buffer.slice(0, cursorPos) + c + buffer.slice(cursorPos)
+        cursorPos += c.length
+    }
+    function backspace() {
+        if (cursorPos === 0) return
+        buffer = buffer.slice(0, cursorPos - 1) + buffer.slice(cursorPos)
+        cursorPos--
+    }
+    function cursorLeft()  { if (cursorPos > 0)             cursorPos-- }
+    function cursorRight() { if (cursorPos < buffer.length) cursorPos++ }
+    function clear() { buffer = ""; cursorPos = 0 }
 
     function submit() {
         const t = buffer
@@ -58,6 +69,7 @@ QtObject {
     function _close() {
         active    = false
         buffer    = ""
+        cursorPos = 0
         title     = ""
         password  = false
         bare      = false
