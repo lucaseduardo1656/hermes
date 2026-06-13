@@ -58,6 +58,9 @@ public slots:
 
     void playTrack(const QVariant &track);
     void playQueue(const QList<QVariant> &tracks, int index = 0);
+    // Apply an mpv `af` filter string live. Empty string clears all filters.
+    // Called from main.cpp when AudioController::eqPresetChanged fires.
+    void setAudioFilter(const QString &afString);
     // Stop mpv, drop the queue, blank the now-playing track. Used by
     // the player card's close button — the auto-hide rule in Main.qml
     // keys off trackTitle being empty.

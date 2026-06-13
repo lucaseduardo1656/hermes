@@ -35,6 +35,8 @@ qt_add_executable(elise
     core/settings/BluetoothController.cpp
     core/settings/AppearanceController.h
     core/settings/AppearanceController.cpp
+    core/settings/AudioController.h
+    core/settings/AudioController.cpp
     core/settings/OfflineMapsController.h
     core/settings/OfflineMapsController.cpp
 )
@@ -93,6 +95,7 @@ qt_add_qml_module(elise
         ui/TrackCarousel.qml
         ui/SettingsPageInterface.qml
         ui/SettingsPageSom.qml
+        ui/SettingsSlider.qml
         ui/SettingsPageSistema.qml
         ui/SignalBars.qml
 )

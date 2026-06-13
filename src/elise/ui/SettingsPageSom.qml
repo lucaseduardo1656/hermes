@@ -1,7 +1,7 @@
 import QtQuick
 import Elise
 
-// Page: Som — volume, equalização, saída, fonte padrão.
+// Page: Som — volume, EQ, saída de áudio, reprodução.
 Flickable {
     id: root
     contentWidth:  width
@@ -20,22 +20,49 @@ Flickable {
         SettingsCard {
             title: "Volume"
 
-            SettingsAction { label: "Volume geral";    sublabel: "65%" }
-            SettingsAction { label: "Equalizador";     sublabel: "Plano" }
+            SettingsSlider {
+                label: "Volume geral"
+                value: Settings.audio.volume
+                onMoved: (v) => Settings.audio.setVolume(v)
+            }
+            SettingsAction {
+                label: "Equalizador"
+                sublabel: {
+                    const cur  = Settings.audio.eqPreset
+                    const opts = Settings.audio.eqOptions
+                    for (let i = 0; i < opts.length; ++i)
+                        if (opts[i].key === cur) return opts[i].label
+                    return cur
+                }
+                onTriggered: ActionSheet.show({
+                    title: "Equalizador",
+                    items: Settings.audio.eqOptions.map(o => ({
+                        label: o.label,
+                        onSelected: function() { Settings.audio.setEqPreset(o.key) }
+                    }))
+                })
+            }
         }
 
         SettingsCard {
             title: "Saída de áudio"
 
-            SettingsAction { label: "Dispositivo";     sublabel: "Alto-falantes do veículo" }
-            SettingsToggle { label: "Áudio espacial";  checked: false }
+            SettingsAction { label: "Dispositivo"; sublabel: "Alto-falantes do veículo" }
+            SettingsToggle {
+                label: "Áudio espacial"
+                checked: Settings.audio.spatialAudio
+                onToggled: (v) => Settings.audio.setSpatialAudio(v)
+            }
         }
 
         SettingsCard {
-            title: "Fonte padrão"
+            title: "Reprodução"
 
-            SettingsAction { label: "Serviço de música"; sublabel: "Spotify" }
-            SettingsToggle { label: "Retomar ao iniciar"; checked: true }
+            SettingsToggle {
+                label: "Retomar ao iniciar"
+                checked: Settings.audio.resumeOnStart
+                onToggled: (v) => Settings.audio.setResumeOnStart(v)
+            }
         }
     }
 }

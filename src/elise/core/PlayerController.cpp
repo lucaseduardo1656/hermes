@@ -1,6 +1,7 @@
 #include "PlayerController.h"
 
 #include <QNetworkRequest>
+#include <QSettings>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -72,6 +73,16 @@ bool PlayerController::ensurePlayer()
     mpv_set_option_string(m_mpv, "demuxer-max-bytes",  "150MiB");
     mpv_set_option_string(m_mpv, "demuxer-readahead-secs", "60");
 
+    // Apply persisted EQ filter. Written by AudioController when the user
+    // picks a preset. Must be set before mpv_initialize so the filter is
+    // active from the first frame of audio.
+    {
+        QSettings s(QStringLiteral("hermes"), QStringLiteral("elise"));
+        const QByteArray af = s.value(QStringLiteral("eqFilter")).toString().toUtf8();
+        if (!af.isEmpty())
+            mpv_set_option_string(m_mpv, "af", af.constData());
+    }
+
     if (mpv_initialize(m_mpv) < 0) {
         qWarning() << "[PlayerController] mpv_initialize failed";
         mpv_destroy(m_mpv);
@@ -101,6 +112,12 @@ qreal PlayerController::progress() const
 }
 
 // ── Playback controls ─────────────────────────────────────────────────────────
+
+void PlayerController::setAudioFilter(const QString &afString) {
+    if (!m_mpv) return;
+    mpv_set_property_string(m_mpv, "af",
+                            afString.isEmpty() ? "" : afString.toUtf8().constData());
+}
 
 void PlayerController::togglePlay()
 {

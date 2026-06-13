@@ -5,6 +5,7 @@
 #include "NetworkController.h"
 #include "BluetoothController.h"
 #include "AppearanceController.h"
+#include "AudioController.h"
 #include "OfflineMapsController.h"
 
 // Root facade for system-wide settings. Owns and exposes one sub-controller
@@ -21,6 +22,7 @@ class SettingsController : public QObject {
     Q_PROPERTY(NetworkController    *network    READ network    CONSTANT)
     Q_PROPERTY(BluetoothController  *bluetooth  READ bluetooth  CONSTANT)
     Q_PROPERTY(AppearanceController  *appearance  READ appearance  CONSTANT)
+    Q_PROPERTY(AudioController       *audio       READ audio       CONSTANT)
     Q_PROPERTY(OfflineMapsController *offlineMaps READ offlineMaps CONSTANT)
 
 public:
@@ -30,6 +32,7 @@ public:
     NetworkController     *network()     const { return m_network; }
     BluetoothController   *bluetooth()   const { return m_bluetooth; }
     AppearanceController  *appearance()  const { return m_appearance; }
+    AudioController       *audio()       const { return m_audio; }
     OfflineMapsController *offlineMaps() const { return m_offlineMaps; }
 
 private:
@@ -37,5 +40,6 @@ private:
     NetworkController     *m_network;
     BluetoothController   *m_bluetooth;
     AppearanceController  *m_appearance;
+    AudioController       *m_audio;
     OfflineMapsController *m_offlineMaps;
 };

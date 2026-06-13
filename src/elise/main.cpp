@@ -7,6 +7,7 @@
 #include "core/PlayerController.h"
 #include "core/NavigationController.h"
 #include "core/settings/SettingsController.h"
+#include "core/settings/AudioController.h"
 
 int main(int argc, char *argv[])
 {
@@ -23,6 +24,12 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("Player",   &player);
     engine.rootContext()->setContextProperty("Nav",      &nav);
     engine.rootContext()->setContextProperty("Settings", &settings);
+
+    // Live EQ: when user changes preset, apply the af filter to mpv immediately.
+    QObject::connect(settings.audio(), &AudioController::eqPresetChanged,
+                     [&player, &settings]() {
+                         player.setAudioFilter(settings.audio()->eqFilterString());
+                     });
 
     engine.loadFromModule("Elise", "Main");
 

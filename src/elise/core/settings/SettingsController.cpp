@@ -6,6 +6,7 @@ SettingsController::SettingsController(QObject *parent)
     , m_network(new NetworkController(this))
     , m_bluetooth(new BluetoothController(this))
     , m_appearance(new AppearanceController(this))
+    , m_audio(new AudioController(this))
     , m_offlineMaps(new OfflineMapsController(this))
 {
 }

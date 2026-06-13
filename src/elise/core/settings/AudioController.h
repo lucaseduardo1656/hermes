@@ -1,0 +1,55 @@
+#pragma once
+#include <QObject>
+#include <QString>
+#include <QSettings>
+#include <QVariantList>
+
+// Controls system-wide audio: ALSA master volume, EQ preset,
+// resume-on-start flag, and spatial audio toggle.
+//
+// Volume is applied to the ALSA Master control via amixer so it
+// affects all audio outputs, not just mpv. EQ preset is persisted
+// to QSettings; PlayerController reads "eqFilter" on mpv init and
+// AudioController::eqPresetChanged is connected in main.cpp to apply
+// the filter live to a running mpv instance.
+class AudioController : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(int          volume        READ volume        WRITE setVolume        NOTIFY volumeChanged)
+    Q_PROPERTY(QString      eqPreset      READ eqPreset      WRITE setEqPreset      NOTIFY eqPresetChanged)
+    Q_PROPERTY(bool         resumeOnStart READ resumeOnStart WRITE setResumeOnStart NOTIFY resumeOnStartChanged)
+    Q_PROPERTY(bool         spatialAudio  READ spatialAudio  WRITE setSpatialAudio  NOTIFY spatialAudioChanged)
+    Q_PROPERTY(QVariantList eqOptions     READ eqOptions     CONSTANT)
+
+public:
+    explicit AudioController(QObject *parent = nullptr);
+
+    int          volume()        const { return m_volume; }
+    QString      eqPreset()      const { return m_eqPreset; }
+    bool         resumeOnStart() const { return m_resumeOnStart; }
+    bool         spatialAudio()  const { return m_spatialAudio; }
+    QVariantList eqOptions()     const;
+
+    // mpv `af` filter string for the current preset. Empty = passthrough.
+    Q_INVOKABLE QString eqFilterString() const;
+
+public slots:
+    void setVolume(int v);
+    void setEqPreset(const QString &key);
+    void setResumeOnStart(bool on);
+    void setSpatialAudio(bool on);
+
+signals:
+    void volumeChanged();
+    void eqPresetChanged();
+    void resumeOnStartChanged();
+    void spatialAudioChanged();
+
+private:
+    void applyAlsaVolume(int v);
+
+    QSettings m_settings;
+    int     m_volume        = 70;
+    QString m_eqPreset;
+    bool    m_resumeOnStart = true;
+    bool    m_spatialAudio  = false;
+};
