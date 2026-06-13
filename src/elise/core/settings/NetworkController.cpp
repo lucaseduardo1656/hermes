@@ -11,6 +11,8 @@
 
 #include <cstring>
 #include <net/if.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -117,6 +119,15 @@ NetworkController::NetworkController(QObject *parent)
     const QString rk = findWlanRfkill();
     if (!rk.isEmpty()) m_wifiPowered = readRfkillSoft(rk);
 
+    // dhcpcd assigns the IP after wpa_supplicant reports "completed", and
+    // there's no D-Bus signal we can hook for that — poll the kernel.
+    m_ipPoll.setInterval(2'000);
+    QObject::connect(&m_ipPoll, &QTimer::timeout, this, [this]{
+        const QString ip = readIfaceIp("wlan0");
+        if (ip != m_ipAddress) { m_ipAddress = ip; emit changed(); }
+    });
+    m_ipPoll.start();
+
     connect();
 }
 
@@ -174,7 +185,10 @@ void NetworkController::connect() {
             });
         m_iface->uponSignal("ScanDone").onInterface(kIfaceIf)
             .call([this](bool /*success*/) {
-                QMetaObject::invokeMethod(this, [this]{ rebuildNetworks(); }, Qt::QueuedConnection);
+                QMetaObject::invokeMethod(this, [this]{
+                    if (m_scanning) { m_scanning = false; emit changed(); }
+                    rebuildNetworks();
+                }, Qt::QueuedConnection);
             });
 
         m_conn->enterEventLoopAsync();
@@ -323,19 +337,19 @@ void NetworkController::rebuildNetworks() {
                 // dBm → percent: -50 = 100%, -100 = 0%
                 int strength = qBound(0, 2 * (signalDbm + 100), 100);
 
-                auto idxIt = bestBySsid.find(ssid);
-                if (idxIt != bestBySsid.end()) {
-                    QVariantMap existing = out[idxIt.value()].toMap();
-                    if (existing["strength"].toInt() >= strength) continue;
-                    out.removeAt(idxIt.value());
-                }
-
                 QVariantMap n;
                 n["ssid"]      = ssid;
                 n["strength"]  = strength;
                 n["frequency"] = freq;
                 n["security"]  = security;
                 n["saved"]     = saved.contains(ssid);
+
+                auto idxIt = bestBySsid.find(ssid);
+                if (idxIt != bestBySsid.end()) {
+                    if (out[idxIt.value()].toMap()["strength"].toInt() >= strength) continue;
+                    out[idxIt.value()] = n;   // update in place — no index shifts
+                    continue;
+                }
                 bestBySsid[ssid] = out.size();
                 out.append(n);
             } catch (...) { /* skip this BSS */ }
@@ -351,6 +365,23 @@ void NetworkController::rebuildNetworks() {
     } catch (const sdbus::Error &e) {
         qWarning() << "NetworkController: rebuildNetworks:" << e.getMessage().c_str();
     }
+}
+
+QString NetworkController::readIfaceIp(const char *name) const {
+    int sock = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0) return {};
+    struct ifreq ifr{};
+    ifr.ifr_addr.sa_family = AF_INET;
+    std::strncpy(ifr.ifr_name, name, IFNAMSIZ - 1);
+    QString out;
+    if (::ioctl(sock, SIOCGIFADDR, &ifr) == 0) {
+        auto *sin = reinterpret_cast<struct sockaddr_in*>(&ifr.ifr_addr);
+        char buf[INET_ADDRSTRLEN]{};
+        if (::inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf)))
+            out = QString::fromLatin1(buf);
+    }
+    ::close(sock);
+    return out;
 }
 
 QString NetworkController::findSavedNetworkPath(const QString &ssid) const {
@@ -466,6 +497,12 @@ void NetworkController::scanWifi() {
     try {
         m_iface->callMethod("Scan").onInterface(kIfaceIf)
                .withArguments(args).dontExpectReply();
+        if (!m_scanning) { m_scanning = true; emit changed(); }
+        // Safety net: ScanDone is usually fast, but if the driver swallows
+        // it we don't want the spinner to spin forever.
+        QTimer::singleShot(8'000, this, [this]{
+            if (m_scanning) { m_scanning = false; emit changed(); }
+        });
     } catch (const sdbus::Error &e) {
         emit errorOccurred(QString::fromStdString(e.getMessage()));
     }

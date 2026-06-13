@@ -94,6 +94,7 @@ qt_add_qml_module(elise
         ui/SettingsPageInterface.qml
         ui/SettingsPageSom.qml
         ui/SettingsPageSistema.qml
+        ui/SignalBars.qml
 )
 
 qt_add_resources(elise "elise_icons"
@@ -131,6 +132,7 @@ qt_add_resources(elise "elise_icons"
         icons/mic.svg
         icons/eye.svg
         icons/eye-off.svg
+        icons/lock.svg
 )
 
 target_link_libraries(elise PRIVATE

@@ -105,7 +105,15 @@ Window {
                 spacing: Theme.spaceL
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: _map ? (_map.routeDistanceM / 1000).toFixed(1) + " km" : ""
+                    text: {
+                        if (!_map) return ""
+                        const m = _map.routeDistanceM
+                        if (Settings.appearance.units === "imperial") {
+                            const mi = m / 1609.344
+                            return mi.toFixed(1) + " mi"
+                        }
+                        return (m / 1000).toFixed(1) + " km"
+                    }
                     color: System.textPrimary
                     font.pixelSize: Theme.fontBody
                     font.weight: Font.Medium
