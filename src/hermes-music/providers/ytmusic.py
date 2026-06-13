@@ -112,6 +112,22 @@ async def get_liked_songs(limit: int = 100) -> list[dict]:
     return [t for item in tracks if (t := _song_to_dict(item))]
 
 
+async def like_track(video_id: str) -> None:
+    yt = _client()
+    await asyncio.to_thread(lambda: yt.rate_song(video_id, "LIKE"))
+
+
+async def unlike_track(video_id: str) -> None:
+    yt = _client()
+    await asyncio.to_thread(lambda: yt.rate_song(video_id, "INDIFFERENT"))
+
+
+async def is_liked(video_id: str) -> bool:
+    yt = _client()
+    result = await asyncio.to_thread(lambda: yt.get_song(video_id))
+    return result.get("videoDetails", {}).get("rating") == "LIKE"
+
+
 async def get_recommendations() -> list[dict]:
     yt = _client()
     result = await asyncio.to_thread(lambda: yt.get_home(limit=3))

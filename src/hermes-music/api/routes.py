@@ -155,6 +155,49 @@ async def get_liked(source: str = Query("all"), limit: int = Query(50)):
     return {"tracks": result, "errors": errors}
 
 
+@router.post("/library/like")
+async def like_track(request: Request):
+    track = await request.json()
+    track_id: str = track.get("id", "")
+    try:
+        if track_id.startswith("spotify:") and spotify.is_connected():
+            await spotify.like_track(track_id.split(":", 1)[1])
+        elif track_id.startswith("ytmusic:") and ytmusic.is_connected():
+            await ytmusic.like_track(track_id.split(":", 1)[1])
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return {"ok": True}
+
+
+@router.post("/library/unlike")
+async def unlike_track(request: Request):
+    track = await request.json()
+    track_id: str = track.get("id", "")
+    try:
+        if track_id.startswith("spotify:") and spotify.is_connected():
+            await spotify.unlike_track(track_id.split(":", 1)[1])
+        elif track_id.startswith("ytmusic:") and ytmusic.is_connected():
+            await ytmusic.unlike_track(track_id.split(":", 1)[1])
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return {"ok": True}
+
+
+@router.get("/library/liked/check")
+async def check_liked(id: str = Query(...)):
+    """Returns {"liked": bool} for the given track id (e.g. "spotify:abc")."""
+    try:
+        if id.startswith("spotify:") and spotify.is_connected():
+            liked = await spotify.is_liked(id.split(":", 1)[1])
+            return {"liked": liked}
+        if id.startswith("ytmusic:") and ytmusic.is_connected():
+            liked = await ytmusic.is_liked(id.split(":", 1)[1])
+            return {"liked": liked}
+    except Exception:
+        pass
+    return {"liked": False}
+
+
 # ── Recommendations ───────────────────────────────────────────────────────────
 
 @router.get("/recommendations")
