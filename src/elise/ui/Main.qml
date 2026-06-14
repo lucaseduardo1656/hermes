@@ -201,6 +201,28 @@ Window {
         onStateChangeRequested: (s) => root.playerState = s
     }
 
+    // Drag-up catch zone — sits above the collapsed player bar and intercepts
+    // upward swipes that start on the map but intend to reveal the player.
+    // Without this, MapLibre's DragHandler grabs the gesture first because
+    // the swipe starts outside PlayerCard's bounds.
+    Item {
+        anchors { left: parent.left; right: parent.right; bottom: _player.top }
+        height: Theme.playerCollapsedH
+        z: 710
+        visible: root._playerVisible && root.playerState === "collapsed"
+
+        DragHandler {
+            target: null
+            yAxis.enabled: true
+            xAxis.enabled: false
+            property real _startY: 0
+            onActiveChanged: {
+                if (active)  _startY = translation.y
+                else if (translation.y - _startY < -16) root.playerState = "half"
+            }
+        }
+    }
+
     // NavigationOverlay is mounted inside the top-left Column above.
 
     // ── Notifications ────────────────────────────────────────────────────────
