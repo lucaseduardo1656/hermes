@@ -129,9 +129,14 @@ Item {
 
         // Tap zone (declared first → lowest z). Button MouseAreas inside the Row
         // sit above and capture taps on themselves; everything else falls through here.
+        // onPositionChanged detects swipe-up before the map's DragHandler reaches
+        // its grab threshold (~10-12 px), at which point it would steal the gesture.
         MouseArea {
             anchors.fill: parent
-            onClicked: root.stateChangeRequested("half")
+            property real _pressY: 0
+            onPressed:          (m) => { _pressY = m.y }
+            onPositionChanged:  (m) => { if (pressed && _pressY - m.y > 8) root.stateChangeRequested("half") }
+            onClicked:          root.stateChangeRequested("half")
         }
 
         Row {
