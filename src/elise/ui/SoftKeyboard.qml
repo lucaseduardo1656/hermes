@@ -121,7 +121,6 @@ Item {
                     Row {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 0
-                        verticalAlignment: Row.AlignVCenter
 
                         readonly property bool _masked:
                             Keyboard.password && !root._revealPwd
@@ -136,10 +135,12 @@ Item {
                             text:  parent._pre
                             color: System.textPrimary
                             font.pixelSize: Theme.fontTitle
+                            anchors.verticalCenter: parent.verticalCenter
                         }
                         Rectangle {
                             width: 2; height: Theme.fontTitle + 2
                             color: System.accent
+                            anchors.verticalCenter: parent.verticalCenter
                             SequentialAnimation on opacity {
                                 loops: Animation.Infinite
                                 running: Keyboard.active
@@ -153,6 +154,7 @@ Item {
                             text:  parent._post
                             color: System.textPrimary
                             font.pixelSize: Theme.fontTitle
+                            anchors.verticalCenter: parent.verticalCenter
                         }
                     }
                 }
