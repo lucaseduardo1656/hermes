@@ -201,26 +201,20 @@ Window {
         onStateChangeRequested: (s) => root.playerState = s
     }
 
-    // Drag-up catch zone — sits above the collapsed player bar and intercepts
-    // upward swipes that start on the map but intend to reveal the player.
-    // Without this, MapLibre's DragHandler grabs the gesture first because
-    // the swipe starts outside PlayerCard's bounds.
-    Item {
-        anchors { left: parent.left; right: parent.right; bottom: _player.top }
-        height: Theme.playerCollapsedH
+    // Swipe-up catch zone — covers the collapsed player bar + one bar-height
+    // above it. MouseArea (not DragHandler) is used because it actually
+    // consumes events, preventing CarMap's DragHandler from stealing the gesture.
+    MouseArea {
+        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+        height: Theme.playerCollapsedH * 2
         z: 710
         visible: root._playerVisible && root.playerState === "collapsed"
+        propagateComposedEvents: true
 
-        DragHandler {
-            target: null
-            yAxis.enabled: true
-            xAxis.enabled: false
-            property real _startY: 0
-            onActiveChanged: {
-                if (active)  _startY = translation.y
-                else if (translation.y - _startY < -16) root.playerState = "half"
-            }
-        }
+        property real _pressY: 0
+
+        onPressed:  (m) => { _pressY = m.y; m.accepted = true }
+        onReleased: (m) => { if (_pressY - m.y > 20) root.playerState = "half" }
     }
 
     // NavigationOverlay is mounted inside the top-left Column above.
