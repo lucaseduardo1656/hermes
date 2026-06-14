@@ -61,6 +61,9 @@ Window {
                       && !_settings.open
                       && !Keyboard.active
             styleUrl:    _mapLoader._styleUrl
+            gestureBottomExclude: root._playerVisible && root.playerState === "collapsed"
+                                    ? Theme.playerCollapsedH * 2 : 0
+            onSwipeUpFromBottom: root.playerState = "half"
         }
     }
 
@@ -201,21 +204,6 @@ Window {
         onStateChangeRequested: (s) => root.playerState = s
     }
 
-    // Swipe-up catch zone — covers the collapsed player bar + one bar-height
-    // above it. MouseArea (not DragHandler) is used because it actually
-    // consumes events, preventing CarMap's DragHandler from stealing the gesture.
-    MouseArea {
-        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-        height: Theme.playerCollapsedH * 2
-        z: 710
-        visible: root._playerVisible && root.playerState === "collapsed"
-        propagateComposedEvents: true
-
-        property real _pressY: 0
-
-        onPressed:  (m) => { _pressY = m.y; m.accepted = true }
-        onReleased: (m) => { if (_pressY - m.y > 20) root.playerState = "half" }
-    }
 
     // NavigationOverlay is mounted inside the top-left Column above.
 

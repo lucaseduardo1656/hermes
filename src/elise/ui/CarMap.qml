@@ -24,6 +24,11 @@ Item {
 
     // ── Public API ───────────────────────────────────────────────────────────
     property bool interactive: true
+    // Height in pixels from the bottom to exclude from map drag gestures.
+    // Set from Main.qml when the player bar is visible so swipe-up in that
+    // zone expands the player instead of panning the map.
+    property real gestureBottomExclude: 0
+    signal swipeUpFromBottom()
     property var  destination: null         // QtPositioning.coordinate or null
     // MapLibre style JSON URL. Set by the outer Loader from
     // Settings.appearance.mapStyleUrl. Changing it requires recreating
@@ -398,10 +403,21 @@ Item {
             enabled: root.interactive
             property real _lastX: 0
             property real _lastY: 0
+            property bool _inExcludedZone: false
+
             onActiveChanged: {
-                if (active) { _lastX = 0; _lastY = 0 }
+                if (active) {
+                    _lastX = 0; _lastY = 0
+                    _inExcludedZone = root.gestureBottomExclude > 0
+                        && centroid.pressPosition.y > (root.height - root.gestureBottomExclude)
+                } else {
+                    if (_inExcludedZone && translation.y < -20)
+                        root.swipeUpFromBottom()
+                    _inExcludedZone = false
+                }
             }
             onTranslationChanged: {
+                if (_inExcludedZone) return
                 const dx = translation.x - _lastX
                 const dy = translation.y - _lastY
                 _lastX = translation.x
