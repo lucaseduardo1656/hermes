@@ -319,8 +319,9 @@ Item {
                     iconSource: "qrc:/icons/mic.svg"
                     iconColor: root._txt
                     width: root._keyW; height: root._keyH
-                    bgColor: root._pill; downColor: root._pillDn
-                    onTapped: { /* voice — placeholder */ }
+                    bgColor: root._pill; downColor: root._pill
+                    opacity: 0.3
+                    enabled: false
                 }
                 KeyboardKey {
                     text:  "@"

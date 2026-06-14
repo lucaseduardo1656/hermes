@@ -21,7 +21,6 @@ static const EqDef kPresets[] = {
              "equalizer=f=1500:width_type=h:width=2000:g=5]" },
 };
 constexpr const char *kDefaultPreset = "flat";
-constexpr const char *kAlsaMixer     = "Master";
 }
 
 AudioController::AudioController(QObject *parent)
@@ -108,13 +107,13 @@ void AudioController::setSpatialAudio(bool on) {
 }
 
 void AudioController::applyAlsaVolume(int v) {
-    // Fire-and-forget: if amixer fails (no card, wrong mixer name)
-    // the volume is still persisted and will be retried on next boot.
+    // Pi 5 HDMI audio has no ALSA mixer controls — use PipeWire via wpctl.
+    // Fire-and-forget; if PipeWire is not yet ready the volume is persisted
+    // in QSettings and reapplied on next AudioController construction.
     QProcess::startDetached(
-        QStringLiteral("amixer"),
-        { QStringLiteral("sset"),
-          QString::fromLatin1(kAlsaMixer),
-          QString::number(v) + QLatin1Char('%'),
-          QStringLiteral("unmute") }
+        QStringLiteral("wpctl"),
+        { QStringLiteral("set-volume"),
+          QStringLiteral("@DEFAULT_AUDIO_SINK@"),
+          QString::number(v) + QLatin1Char('%') }
     );
 }

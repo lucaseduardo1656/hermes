@@ -29,6 +29,7 @@ Item {
     // The dial — rotates inverse to the map bearing so the N pointer
     // always indicates true north on screen.
     Item {
+        id: _dial
         anchors.fill: parent
         // Map bearing wraps 0..360; the inverse for the dial is just
         // -bearing. A naive NumberAnimation on rotation would spin
@@ -50,21 +51,21 @@ Item {
                 strokeWidth: 0
                 strokeColor: "transparent"
                 fillColor: System.accent
-                startX: parent._cx; startY: 6              // tip (top)
-                PathLine { x: parent._cx + 6; y: parent._cy }     // east shoulder
-                PathLine { x: parent._cx;     y: parent._cy }     // back to centre
-                PathLine { x: parent._cx - 6; y: parent._cy }     // west shoulder
-                PathLine { x: parent._cx;     y: 6 }              // close
+                startX: _dial._cx; startY: 6
+                PathLine { x: _dial._cx + 6; y: _dial._cy }
+                PathLine { x: _dial._cx;     y: _dial._cy }
+                PathLine { x: _dial._cx - 6; y: _dial._cy }
+                PathLine { x: _dial._cx;     y: 6 }
             }
             ShapePath {
                 strokeWidth: 0
                 strokeColor: "transparent"
                 fillColor: System.textMuted
-                startX: parent._cx; startY: parent.height - 6   // tip (bottom)
-                PathLine { x: parent._cx + 5; y: parent._cy }
-                PathLine { x: parent._cx;     y: parent._cy }
-                PathLine { x: parent._cx - 5; y: parent._cy }
-                PathLine { x: parent._cx;     y: parent.height - 6 }
+                startX: _dial._cx; startY: _dial.height - 6
+                PathLine { x: _dial._cx + 5; y: _dial._cy }
+                PathLine { x: _dial._cx;     y: _dial._cy }
+                PathLine { x: _dial._cx - 5; y: _dial._cy }
+                PathLine { x: _dial._cx;     y: _dial.height - 6 }
             }
         }
 
