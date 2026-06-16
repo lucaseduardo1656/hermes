@@ -23,6 +23,14 @@ src/elise/build/
 # Build log
 build.log
 
+# Road-metadata generator working artifacts (the shipped seed lives in the
+# board overlay; this is the regenerable scratch copy + downloaded tooling)
+tools/roaddata/roaddata.sqlite
+tools/roaddata/*.sqlite-wal
+tools/roaddata/*.sqlite-shm
+tools/roaddata/duckdb
+tools/roaddata/*.zip
+
 # Secrets — nunca commitar
 board/hermes-pi5/rootfs-overlay/etc/wpa_supplicant/wpa_supplicant-filled.conf
 *.key

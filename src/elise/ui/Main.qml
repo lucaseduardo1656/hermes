@@ -53,6 +53,9 @@ Window {
     // Alias for the rest of Main.qml — search bar, summary, etc.
     // bind through `_map`.
     property var _map: _mapLoader.item
+    // True while the POI side panel is up; chrome on the right edge hides
+    // so it never sits under the panel.
+    readonly property bool _poiPanelOpen: _map && _map.poiPanelOpen
 
     Component {
         id: _mapComponent
@@ -63,6 +66,8 @@ Window {
             styleUrl:    _mapLoader._styleUrl
             gestureBottomExclude: root._playerVisible && root.playerState === "collapsed"
                                     ? Theme.playerCollapsedH * 2 : 0
+            bottomOffset: root._playerVisible && root.playerState === "collapsed"
+                            ? Theme.playerCollapsedH : 0
             onSwipeUpFromBottom: root.playerState = "half"
         }
     }
@@ -131,34 +136,42 @@ Window {
         }
     }
 
-    // Compass dial — appears whenever the map has been rotated off
-    // north. Tap to snap back. Sits just above the recenter Fab.
-    // Compass + recenter combo — sits where the recenter arrow used
-    // to. Always visible: shows north when bearing != 0, doubles as
-    // the "snap back to GPS + north" button when tapped.
-    CompassRose {
-        id: _recenterFab     // kept the id so other anchors don't shift
+    // ── Right-edge FAB stack ──────────────────────────────────────────────────
+    // One column owns every floating button (music · places · recenter ·
+    // settings) so visibility and stacking live in a single place instead of
+    // chained anchors and a condition repeated on each button. Children lay
+    // top→down; settings is last so it sits nearest the player bar. Hidden
+    // children drop out of the layout automatically, so the stack reflows.
+    Column {
+        id: _fabStack
         anchors {
             right:  parent.right; rightMargin: Theme.spaceL
-            bottom: _settingsFab.top; bottomMargin: Theme.spaceL
+            bottom: root._playerVisible ? _player.top : parent.bottom
+            bottomMargin: Theme.spaceL
         }
+        spacing: Theme.spaceL
         z: 600
-        bearing: _map ? _map.bearing : 0
-        visible: root.playerState !== "expanded"
-        onResetRequested: if (_map) _map.recenter()
-    }
+        visible: root.playerState !== "expanded" && !root._poiPanelOpen
 
-    // Music Fab — only when the player is hidden. Tapping summons the
-    // player bar to its half-expanded state. Stacks above recenter.
-    Fab {
-        anchors {
-            right:  parent.right; rightMargin: Theme.spaceL
-            bottom: _recenterFab.top; bottomMargin: Theme.spaceL
+        Fab {     // summon player — only when it's hidden
+            icon: "qrc:/icons/music-note.svg"
+            visible: !root._playerVisible
+            onClicked: root.playerState = "half"
         }
-        z: 600
-        icon: "qrc:/icons/music-note.svg"
-        visible: !root._playerVisible && root.playerState !== "expanded"
-        onClicked: root.playerState = "half"
+        Fab {     // toggle nearby places
+            icon: "qrc:/icons/place.svg"
+            color:     RoadInfo.poisVisible ? System.accent : System.surface
+            iconColor: RoadInfo.poisVisible ? "#000000" : System.textSecondary
+            onClicked: RoadInfo.poisVisible = !RoadInfo.poisVisible
+        }
+        CompassRose {     // recenter + snap-to-north
+            bearing: _map ? _map.bearing : 0
+            onResetRequested: if (_map) _map.recenter()
+        }
+        Fab {     // settings
+            icon: "qrc:/icons/settings.svg"
+            onClicked: _settings.open = true
+        }
     }
 
     // ── Input blocker (covers only area above the player card) ───────────────
@@ -170,21 +183,6 @@ Window {
         onDismissed: root.playerState = "collapsed"
     }
 
-    // ── Floating action button (settings) ────────────────────────────────────
-    // Anchored to the top of the player card when it's around; otherwise
-    // sits at the screen bottom-right corner.
-    Fab {
-        id: _settingsFab
-        anchors {
-            right:  parent.right; rightMargin: Theme.spaceL
-            bottom: root._playerVisible ? _player.top : parent.bottom
-            bottomMargin: Theme.spaceL
-        }
-        z: 600
-        icon: "qrc:/icons/settings.svg"
-        visible: root.playerState !== "expanded"
-        onClicked: _settings.open = true
-    }
 
     // ── Player card ──────────────────────────────────────────────────────────
     PlayerCard {

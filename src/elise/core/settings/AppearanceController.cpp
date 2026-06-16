@@ -4,16 +4,14 @@
 
 namespace {
 constexpr const char *kBaseUrl = "https://tiles.openfreemap.org/styles/";
-constexpr const char *kDefault = "dark";
+constexpr const char *kDefault = "liberty";
 
-// (key, label) pairs surfaced to QML for the picker. Order matters —
-// "Dark" stays first because it's the Tesla-most look.
 struct StyleDef { const char *key; const char *label; };
 static const StyleDef kStyles[] = {
-    { "dark",     "Dark (Tesla-like)" },
-    { "positron", "Positron (claro)"  },
-    { "liberty",  "Liberty (mapa de rua)" },
-    { "bright",   "Bright (vívido)"   },
+    { "liberty",  "Liberty (3D buildings)" },
+    { "dark",     "Dark (minimalista)"     },
+    { "positron", "Positron (claro)"       },
+    { "bright",   "Bright (vívido)"        },
 };
 }
 

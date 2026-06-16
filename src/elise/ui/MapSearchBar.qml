@@ -20,6 +20,11 @@ Item {
     readonly property bool _editing:
         Keyboard.active && Keyboard.title === "Buscar endereço"
 
+    // True when a destination is set and we're not actively editing — the
+    // bar then becomes a persistent "navigating to X" header.
+    readonly property bool _navigating:
+        map && map.hasDestination && !_editing
+
     implicitHeight: open ? (_field.height + 6 + _list.implicitHeight)
                          : _field.height
 
@@ -55,41 +60,57 @@ Item {
     Rectangle {
         id: _field
         anchors { left: parent.left; right: parent.right; top: parent.top }
-        height: Theme.btnMedium
+        height: root._navigating ? 60 : Theme.btnMedium
         radius: Theme.radiusM
         color: System.surface
         border.color: root._editing ? System.accent : System.border
         border.width: 1
+        Behavior on height { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutQuad } }
 
-        Row {
+        // Leading icon: navigation arrow while routing, search otherwise.
+        SvgIcon {
+            id: _leadIcon
+            anchors { left: parent.left; leftMargin: Theme.spaceM
+                      verticalCenter: parent.verticalCenter }
+            source: root._navigating ? "qrc:/icons/arrow-straight.svg" : "qrc:/icons/search.svg"
+            color:  root._navigating ? System.accent : System.textMuted
+            size:   root._navigating ? Theme.iconS : Theme.iconXS
+        }
+
+        // Content: "Navegando → name" while routing, else query/placeholder.
+        Column {
             anchors {
-                fill: parent
-                leftMargin: Theme.spaceM; rightMargin: Theme.spaceM
+                left: _leadIcon.right; leftMargin: Theme.spaceM
+                right: _clearChip.visible ? _clearChip.left : parent.right
+                rightMargin: Theme.spaceS
+                verticalCenter: parent.verticalCenter
             }
-            spacing: Theme.spaceS
+            spacing: 1
 
-            SvgIcon {
-                anchors.verticalCenter: parent.verticalCenter
-                source: "qrc:/icons/search.svg"
-                color:  System.textMuted
-                size:   Theme.iconXS
+            Text {
+                visible: root._navigating
+                width: parent.width
+                text: "NAVEGANDO"
+                color: System.accent
+                font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 1.2
             }
             Text {
-                id: _txt
-                anchors.verticalCenter: parent.verticalCenter
-                text:  root.query !== "" ? root.query : "Para onde?"
-                color: root.query !== "" ? System.textPrimary : System.textMuted
+                width: parent.width
+                text: root._navigating
+                        ? (root.map.destinationName || "Destino")
+                        : (root.query !== "" ? root.query : "Para onde?")
+                color: root._navigating || root.query !== ""
+                         ? System.textPrimary : System.textMuted
                 font.pixelSize: Theme.fontLabel
-                width: parent.width - Theme.iconXS - Theme.spaceS
-                       - (root.map && root.map.hasDestination
-                            ? Theme.btnSmall + Theme.spaceS : 0)
+                font.weight: root._navigating ? Font.Bold : Font.Normal
                 elide: Text.ElideRight
             }
         }
 
-        // Clear destination chip.
+        // Clear / cancel chip (clears destination or query).
         Rectangle {
-            visible: root.map && root.map.hasDestination
+            id: _clearChip
+            visible: (root.map && root.map.hasDestination) || root.query !== ""
             anchors {
                 right: parent.right; rightMargin: Theme.spaceXS
                 verticalCenter: parent.verticalCenter
@@ -115,10 +136,11 @@ Item {
             }
         }
 
+        // Tapping the field (outside the chip) opens the keyboard to search.
         MouseArea {
             anchors {
                 fill: parent
-                rightMargin: root.map && root.map.hasDestination
+                rightMargin: _clearChip.visible
                                ? Theme.btnSmall + Theme.spaceXS * 2 : 0
             }
             onClicked: {
@@ -127,8 +149,6 @@ Item {
                     bare:     true,
                     initial:  root.query,
                     onSubmit: function(text) {
-                        // Submit just closes the keyboard; live updates
-                        // already populated results and the query.
                         root.query = text
                         if (root.results.length === 0 && root.map && text.trim().length >= 3) {
                             root.map.geocode(text, function(items) {
@@ -201,8 +221,8 @@ Item {
                     anchors.fill: parent
                     onClicked: {
                         if (root.map)
-                            root.map.setDestination(modelData.coordinate)
-                        root.query = modelData.address
+                            root.map.setDestination(modelData.coordinate, modelData.address)
+                        root.query = ""
                         root.open  = false
                         // Close the keyboard if still up.
                         if (Keyboard.active) Keyboard.dismiss()

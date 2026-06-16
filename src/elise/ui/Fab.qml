@@ -14,6 +14,7 @@ Item {
 
     property url   icon
     property color color: System.accent
+    property color iconColor: "#000000"
     signal clicked()
 
     readonly property int size: Theme.btnMedium
@@ -36,7 +37,7 @@ Item {
     SvgIcon {
         anchors.centerIn: parent
         source: root.icon
-        color:  "#000000"
+        color:  root.iconColor
         size:   Theme.iconS
     }
 

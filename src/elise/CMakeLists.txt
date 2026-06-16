@@ -4,7 +4,7 @@ project(elise VERSION 0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Svg Network Multimedia Location Positioning)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Svg Network Multimedia Location Positioning Sql)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDBUS_CPP REQUIRED IMPORTED_TARGET sdbus-c++)
@@ -39,6 +39,10 @@ qt_add_executable(elise
     core/settings/AudioController.cpp
     core/settings/OfflineMapsController.h
     core/settings/OfflineMapsController.cpp
+    core/GpsController.h
+    core/GpsController.cpp
+    core/RoadInfoController.h
+    core/RoadInfoController.cpp
 )
 
 set_source_files_properties(ui/Theme.qml PROPERTIES
@@ -136,6 +140,21 @@ qt_add_resources(elise "elise_icons"
         icons/eye.svg
         icons/eye-off.svg
         icons/lock.svg
+        icons/speed-camera.svg
+        icons/fuel.svg
+        icons/charging.svg
+        icons/food.svg
+        icons/hospital.svg
+        icons/pharmacy.svg
+        icons/place.svg
+        icons/shopping.svg
+        icons/supermarket.svg
+        icons/bank.svg
+        icons/lodging.svg
+        icons/phone.svg
+        icons/globe.svg
+        icons/star.svg
+        icons/clock.svg
 )
 
 target_link_libraries(elise PRIVATE
@@ -148,6 +167,7 @@ target_link_libraries(elise PRIVATE
     Qt6::Multimedia
     Qt6::Location
     Qt6::Positioning
+    Qt6::Sql
     PkgConfig::SDBUS_CPP
     PkgConfig::MPV
 )

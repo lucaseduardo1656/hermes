@@ -1,0 +1,12 @@
+#!/bin/sh
+if [ "$interface" != "wlan0" ] || [ "$ifssid" != "S25 FE de Lucas" ]; then
+    return
+fi
+case "$reason" in
+BOUND|RENEW|REBIND|REBOOT)
+    ip addr add 10.144.227.100/24 dev wlan0 2>/dev/null || true
+    ;;
+EXPIRE|FAIL|NOCARRIER|RELEASE|STOP)
+    ip addr del 10.144.227.100/24 dev wlan0 2>/dev/null || true
+    ;;
+esac
