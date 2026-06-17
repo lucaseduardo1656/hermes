@@ -38,10 +38,13 @@ CREATE TABLE IF NOT EXISTS poi (
     lat      REAL NOT NULL,
     lon      REAL NOT NULL,
     category TEXT NOT NULL,            -- normalised bucket (food|fuel|shopping|…)
+    subcat   TEXT,                     -- fine category (overture/osm), shown as label
+    importance REAL DEFAULT 0.4,       -- 0..1 prominence (overture confidence)
     name     TEXT,
     address  TEXT,
     phone    TEXT,
     website  TEXT,
+    socials  TEXT,                     -- first social URL, if any
     src      TEXT,                     -- osm | overture
     osm_id   INTEGER UNIQUE
 );

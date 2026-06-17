@@ -2,6 +2,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QCursor>
+#include <QStyleHints>
 
 #include "core/SystemController.h"
 #include "core/PlayerController.h"
@@ -15,6 +16,12 @@ int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
     app.setOverrideCursor(Qt::BlankCursor);
+
+    // The resistive WaveShare panel jitters several pixels the instant a finger
+    // lands, which made the map's pan DragHandler grab the touch immediately and
+    // starve the long-press detection. Raise the drag threshold so a small
+    // jitter no longer counts as a drag — pan still feels responsive.
+    app.styleHints()->setStartDragDistance(28);
 
     SystemController    system;
     PlayerController    player;

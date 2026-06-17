@@ -52,6 +52,34 @@ Item {
         onTriggered: _map.center = root._smoothCoord
     }
 
+    // ── POI viewport feed ─────────────────────────────────────────────────────
+    // Debounced: on every pan/zoom we hand the visible bbox + zoom to RoadInfo,
+    // which re-clusters the POIs for that region (so panning to a far city shows
+    // its POIs too). Skipped while POIs are hidden.
+    Timer {
+        id: _vpDebounce
+        interval: 140; repeat: false
+        onTriggered: root._pushViewport()
+    }
+    function _pushViewport() {
+        if (!_map) return
+        const pts = [Qt.point(0, 0), Qt.point(width, 0),
+                     Qt.point(0, height), Qt.point(width, height)]
+        let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180, ok = false
+        for (let i = 0; i < pts.length; ++i) {
+            const c = _map.toCoordinate(pts[i], false)
+            if (!c.isValid || isNaN(c.latitude) || isNaN(c.longitude)) continue
+            ok = true
+            minLat = Math.min(minLat, c.latitude); maxLat = Math.max(maxLat, c.latitude)
+            minLon = Math.min(minLon, c.longitude); maxLon = Math.max(maxLon, c.longitude)
+        }
+        if (ok) RoadInfo.updateViewport(minLat, minLon, maxLat, maxLon, _map.zoomLevel)
+    }
+    Connections {
+        target: RoadInfo
+        function onPoisVisibleChanged() { if (RoadInfo.poisVisible) root._pushViewport() }
+    }
+
     // Approximate meters-per-pixel at current zoom + latitude.
     // Used to scale the GPS accuracy ring to screen pixels.
     readonly property real _mpp: _map
@@ -68,6 +96,15 @@ Item {
     property bool _markerPickerVisible: false
     property var  _selectedPoi: null       // POI tapped → info card + route
 
+    // Current-location indicator (reverse-geocoded street · area).
+    property string _curStreet: ""
+    property string _curArea:   ""
+    property real   _lastGeoLat: 1000
+    property real   _lastGeoLon: 1000
+
+    // Long-press dropped pin (Google-style "drop a pin").
+    property var _droppedPin: null         // QtPositioning.coordinate or null
+
     function _poiColor(cat) {
         switch (cat) {
         case "fuel":        return "#F57C00"
@@ -79,7 +116,14 @@ Item {
         case "hospital":    return "#D32F2F"
         case "pharmacy":    return "#00897B"
         case "lodging":     return "#5D4037"
-        default:            return "#555555"
+        case "worship":     return "#7B5E57"
+        case "park":        return "#388E3C"
+        case "education":   return "#F9A825"
+        case "attraction":  return "#E64A19"
+        case "beauty":      return "#AD1457"
+        case "gym":         return "#283593"
+        case "automotive":  return "#455A64"
+        default:            return "#607D8B"   // generic place
         }
     }
     function _poiIcon(cat) {
@@ -93,6 +137,13 @@ Item {
         case "hospital":    return "qrc:/icons/hospital.svg"
         case "pharmacy":    return "qrc:/icons/pharmacy.svg"
         case "lodging":     return "qrc:/icons/lodging.svg"
+        case "worship":     return "qrc:/icons/church.svg"
+        case "park":        return "qrc:/icons/park.svg"
+        case "education":   return "qrc:/icons/school.svg"
+        case "attraction":  return "qrc:/icons/attraction.svg"
+        case "beauty":      return "qrc:/icons/beauty.svg"
+        case "gym":         return "qrc:/icons/gym.svg"
+        case "automotive":  return "qrc:/icons/car.svg"
         default:            return "qrc:/icons/place.svg"
         }
     }
@@ -107,8 +158,47 @@ Item {
         case "hospital":    return "Saúde"
         case "pharmacy":    return "Farmácia"
         case "lodging":     return "Hospedagem"
+        case "worship":     return "Templo"
+        case "park":        return "Parque"
+        case "education":   return "Educação"
+        case "attraction":  return "Atração"
+        case "beauty":      return "Beleza"
+        case "gym":         return "Academia"
+        case "automotive":  return "Automotivo"
         default:            return "Local"
         }
+    }
+    // Human label from the fine Overture/OSM category (falls back to bucket).
+    readonly property var _subLabels: ({
+        "restaurant":"Restaurante","bar":"Bar","pub":"Bar","cafe":"Café",
+        "coffee_shop":"Cafeteria","fast_food_restaurant":"Fast food","bakery":"Padaria",
+        "pizza_restaurant":"Pizzaria","ice_cream_shop":"Sorveteria","snack_bar":"Lanchonete",
+        "churrascaria":"Churrascaria","steakhouse":"Churrascaria",
+        "beauty_salon":"Salão de beleza","nail_salon":"Manicure","hair_salon":"Cabeleireiro",
+        "barber":"Barbearia","spa":"Spa",
+        "supermarket":"Supermercado","grocery_store":"Mercearia","convenience_store":"Conveniência",
+        "pharmacy":"Farmácia","drugstore":"Farmácia",
+        "hospital":"Hospital","clinic":"Clínica","doctor":"Médico","dentist":"Dentista",
+        "bank":"Banco","atm":"Caixa eletrônico",
+        "hotel":"Hotel","motel":"Motel","pousada":"Pousada",
+        "gas_station":"Posto de combustível","clothing_store":"Loja de roupas",
+        "shoe_store":"Calçados","furniture_store":"Móveis","hardware_store":"Material de construção",
+        "electronics_store":"Eletrônicos","pet_store":"Pet shop","bookstore":"Livraria",
+        "gym":"Academia","school":"Escola","church":"Igreja","place_of_worship":"Igreja",
+        "cathedral":"Catedral","chapel":"Capela","mosque":"Mesquita","temple":"Templo",
+        "park":"Parque","garden":"Jardim","playground":"Playground","beach":"Praia",
+        "museum":"Museu","viewpoint":"Mirante","monument":"Monumento","art_gallery":"Galeria",
+        "college_university":"Faculdade","university":"Universidade","library":"Biblioteca",
+        "stadium":"Estádio","zoo":"Zoológico","theme_park":"Parque temático",
+        "landmark_and_historical_building":"Ponto histórico"
+    })
+    function _poiLabel(poi) {
+        const s = poi.subcat
+        if (s && s.length) {
+            if (_subLabels[s]) return _subLabels[s]
+            return s.replace(/_/g, " ").replace(/\b\w/g, function(c){ return c.toUpperCase() })
+        }
+        return _poiCatLabel(poi.category)
     }
 
     signal swipeUpFromBottom()
@@ -125,6 +215,10 @@ Item {
     // persistently in the search bar / route header so navigation always
     // says where we're going.
     property string destinationName: ""
+    // A picked destination first enters a *preview* (route drawn + ETA card,
+    // map framed on the whole route). Turn-by-turn / heading-up / auto-tilt
+    // only kick in once the user taps "Iniciar" → navStarted = true.
+    property bool navStarted: false
     // True while the POI side panel is open — lets Main hide the right-edge
     // FABs so they don't sit under the panel.
     readonly property bool poiPanelOpen: _selectedPoi !== null
@@ -132,6 +226,23 @@ Item {
     readonly property real  bearing: _map ? _map.bearing : 0
 
     function resetBearing() { _map.bearing = 0 }
+
+    // Camera snapshot / restore — used when the style switch recreates the map
+    // so zoom/tilt/bearing/centre survive the theme change.
+    function cameraState() {
+        return { lat: _map.center.latitude, lon: _map.center.longitude,
+                 zoom: _map.zoomLevel, tilt: _map.tilt, bearing: _map.bearing,
+                 following: root._following }
+    }
+    function applyCamera(s) {
+        if (!s) return
+        root._following = false           // don't let the follow-tick fight the restore
+        _map.zoomLevel = s.zoom
+        _map.tilt      = s.tilt
+        _map.bearing   = s.bearing
+        _map.center    = QtPositioning.coordinate(s.lat, s.lon)
+        root._following = s.following
+    }
     readonly property real  routeDistanceM: _routes.count > 0
                                               ? _routes.get(0).distance : 0
     readonly property real  routeDurationS: _routes.count > 0
@@ -149,7 +260,7 @@ Item {
         }
     }
 
-    function setDestination(coord, name) {
+    function setDestination(coord, name, address) {
         // Snapshot the current view as the route origin BEFORE the
         // destination triggers a viewport fit — otherwise the next
         // route query uses the destination as both endpoints (no
@@ -158,7 +269,18 @@ Item {
                          ? GPS.coordinate
                          : _map.center
         destinationName = name || ""
+        navStarted = false            // show the preview first
         destination = coord
+        if (name)
+            RoadInfo.addRecent(coord.latitude, coord.longitude, name, address || "")
+    }
+
+    // Commit to a previewed route: start turn-by-turn navigation.
+    function startNavigation() {
+        if (!hasDestination) return
+        navStarted = true
+        _recomputeManeuver()
+        recenter()
     }
 
     // The point we use as "where the car is" for routing. Real GPS
@@ -169,6 +291,7 @@ Item {
     function clearDestination() {
         destination = null
         destinationName = ""
+        navStarted = false
         Nav.update(false, "", "", "straight", 0)
     }
 
@@ -348,6 +471,59 @@ Item {
         }
     }
 
+    // Reverse geocoder — coordinate → address. Used by the bottom location
+    // indicator and the long-press dropped pin. One in-flight request at a
+    // time (cb receives {street, area, text} or null).
+    GeocodeModel {
+        id: _revGeo
+        plugin: _osmServices
+        autoUpdate: false
+        limit: 1
+        property var _cb: null
+        onStatusChanged: {
+            if (status === GeocodeModel.Ready) {
+                const cb = _cb; _cb = null
+                if (cb) {
+                    if (count > 0) {
+                        const a = get(0).address
+                        cb({ street: a.street,
+                             area:  a.district || a.city || a.county || a.state,
+                             text:  a.text })
+                    } else cb(null)
+                }
+            } else if (status === GeocodeModel.Error) {
+                const cb = _cb; _cb = null; if (cb) cb(null)
+            }
+        }
+    }
+    function reverseGeocode(coord, cb) {
+        if (_revGeo.status === GeocodeModel.Loading) return   // busy → skip
+        _revGeo._cb   = cb
+        _revGeo.query = coord
+        _revGeo.update()
+    }
+
+    // Long-press → drop a pin. While the search panel is setting Home/Work the
+    // pin is saved to that slot; otherwise it opens the info card so you can
+    // navigate or save it. The address fills in once reverse geocoding returns.
+    function _dropPinAt(coord) {
+        if (RoadInfo.pendingPlace !== "") {
+            RoadInfo.savePlace(RoadInfo.pendingPlace, coord.latitude, coord.longitude,
+                RoadInfo.pendingPlace === "home" ? "Casa" : "Trabalho")
+            return
+        }
+        root._selectedPoi = { lat: coord.latitude, lon: coord.longitude,
+                              category: "place", name: "Ponto no mapa",
+                              subcat: "", address: "", _dropped: true }
+        reverseGeocode(coord, function(a) {
+            const p = root._selectedPoi
+            if (a && p && p._dropped)
+                root._selectedPoi = { lat: p.lat, lon: p.lon, category: "place",
+                    name: a.street || "Ponto no mapa", subcat: "",
+                    address: a.text || "", _dropped: true }
+        })
+    }
+
     // ── Routing ──────────────────────────────────────────────────────────────
     // RouteQuery defaults are CarTravel + FastestRoute — we deliberately
     // omit the enum bindings, Qt 6's QML namespacing leaves the enum
@@ -451,7 +627,26 @@ Item {
             // Heading-up only at driving speed (>3 m/s = ~10 km/h).
             if (_following && GPS.directionValid && GPS.speed > 3.0)
                 _map.bearing = GPS.direction
+
+            // Refresh the location indicator after moving ~120 m (Nominatim
+            // reverse geocode — online; left blank when it fails/offline).
+            if (root._distM(root._lastGeoLat, root._lastGeoLon, lat, lon) > 120) {
+                root._lastGeoLat = lat; root._lastGeoLon = lon
+                root.reverseGeocode(GPS.coordinate, function(a) {
+                    if (a) { root._curStreet = a.street || a.area || ""
+                             root._curArea   = a.street ? (a.area || "") : "" }
+                })
+            }
         }
+    }
+
+    // Small equirect distance (m) for the indicator throttle.
+    function _distM(la1, lo1, la2, lo2) {
+        if (la1 > 999) return 1e9
+        const mlat = (la1 + la2) * 0.5 * Math.PI / 180
+        const dx = (lo2 - lo1) * 111320 * Math.cos(mlat)
+        const dy = (la2 - la1) * 111320
+        return Math.sqrt(dx*dx + dy*dy)
     }
 
     // Auto-tilt: 45° when navigation starts, flat when it ends.
@@ -474,7 +669,9 @@ Item {
             root._remainingPath  = []
             if (_routes.count > 0) {
                 const r = _routes.get(0)
-                if (r && r.path && r.path.length > 0)
+                // Frame the whole route only in preview; once navigating we
+                // stay locked on the car instead.
+                if (r && r.path && r.path.length > 0 && !root.navStarted)
                     _fitRouteToViewport(r.path)
             }
             _recomputeManeuver()
@@ -507,7 +704,9 @@ Item {
     // / distance / direction to the global Nav controller. The
     // NavigationOverlay banner up top binds to Nav.
     function _recomputeManeuver() {
-        if (!root.hasDestination || _routes.count === 0) {
+        // While previewing (route shown but trip not started) Nav stays
+        // inactive — no turn-by-turn banner, no auto-tilt/heading-up.
+        if (!root.hasDestination || _routes.count === 0 || !root.navStarted) {
             Nav.update(false, "", "", "straight", 0)
             return
         }
@@ -577,6 +776,11 @@ Item {
         activeMapType: supportedMapTypes.length > 0
                          ? supportedMapTypes[0] : null
 
+        // Re-cluster POIs when the viewport changes.
+        onCenterChanged:    _vpDebounce.restart()
+        onZoomLevelChanged: _vpDebounce.restart()
+        Component.onCompleted: _vpDebounce.restart()   // initial POI load
+
         // Smooth heading rotation when following in navigation mode.
         Behavior on bearing {
             enabled: _following && GPS.valid && GPS.speed > 3.0
@@ -587,8 +791,12 @@ Item {
             }
         }
 
-        // Smooth tilt animation for 2D↔3D transitions.
+        // Smooth tilt animation for programmatic 2D↔3D transitions (recenter,
+        // navigation). Disabled while the user is actively shoving so the pitch
+        // tracks the fingers 1:1 — any angle between flat and 45° — instead of
+        // the animation fighting every frame and snapping to the extremes.
         Behavior on tilt {
+            enabled: _twoFinger._mode !== "tilt"
             NumberAnimation { duration: 700; easing.type: Easing.InOutCubic }
         }
 
@@ -606,10 +814,29 @@ Item {
             property real _lastX: 0
             property real _lastY: 0
             property bool _inExcludedZone: false
+            // Whole-gesture accumulation. The eGalax fragments one finger drag
+            // into many short active/inactive cycles, so we track the gesture
+            // across cycles and only judge tap-vs-pan once the finger is truly
+            // up (no new cycle for _tapEnd.interval). Small total travel = tap.
+            property bool _gActive: false
+            property real _gStartX: 0
+            property real _gStartY: 0
+            property real _gLastX: 0
+            property real _gLastY: 0
+            property double _gStartTime: 0
 
             onActiveChanged: {
                 if (active) {
                     _lastX = 0; _lastY = 0
+                    _tapEnd.stop()
+                    if (!_gActive) {
+                        _gActive = true
+                        _gStartX = centroid.pressPosition.x
+                        _gStartY = centroid.pressPosition.y
+                        _gStartTime = Date.now()
+                    }
+                    _gLastX = centroid.position.x
+                    _gLastY = centroid.position.y
                     _inExcludedZone = root.gestureBottomExclude > 0
                         && centroid.pressPosition.y > (root.height - root.gestureBottomExclude)
                     if (!_inExcludedZone) {
@@ -620,6 +847,7 @@ Item {
                     if (_inExcludedZone && translation.y < -20)
                         root.swipeUpFromBottom()
                     _inExcludedZone = false
+                    _tapEnd.restart()              // maybe gesture ended — wait & judge
                 }
             }
             onTranslationChanged: {
@@ -629,53 +857,90 @@ Item {
                 _lastX = translation.x
                 _lastY = translation.y
                 _map.pan(-dx, -dy)
+                _gLastX = centroid.position.x      // remember where we ended up
+                _gLastY = centroid.position.y
             }
         }
 
-        PinchHandler {
-            target: null
-            enabled: root.interactive
-            // Two-finger gesture drives both zoom and bearing — Qt's
-            // PinchHandler reports activeScale (>0) and activeRotation
-            // (degrees) during the same gesture.
-            property real _startZoom:    14
-            property real _startBearing: 0
-            onActiveChanged: {
-                if (active) {
-                    _startZoom    = _map.zoomLevel
-                    _startBearing = _map.bearing
+        // Fires once the finger has truly lifted (no new drag cycle for its
+        // interval). A tap = short and ends near where it began (net
+        // displacement, so a transient jitter spike that springs back doesn't
+        // count); a pan travels far and/or lasts long → no pin.
+        Timer {
+            id: _tapEnd
+            interval: 220; repeat: false
+            onTriggered: {
+                const dx = _drag._gLastX - _drag._gStartX
+                const dy = _drag._gLastY - _drag._gStartY
+                const net = Math.sqrt(dx * dx + dy * dy)
+                const dt  = Date.now() - _drag._gStartTime
+                console.warn("TAP end net=" + net.toFixed(0) + " dt=" + dt)
+                _drag._gActive = false
+                if (net < 35 && dt < 600) {
+                    const c = _map.toCoordinate(Qt.point(_drag._gStartX, _drag._gStartY), false)
+                    if (c && c.isValid) root._dropPinAt(c)
                 }
             }
-            onActiveScaleChanged: {
-                _map.zoomLevel = Math.max(2, Math.min(19,
-                    _startZoom + Math.log(activeScale) / Math.log(2)))
-            }
-            onActiveRotationChanged: {
-                // Finger rotates clockwise → map content should follow
-                // clockwise, which means the camera bearing decreases.
-                // Subtract to keep gesture and rendered direction aligned.
-                let b = _startBearing - activeRotation
-                while (b < 0)   b += 360
-                while (b > 360) b -= 360
-                _map.bearing = b
-            }
         }
 
-        // Two-finger vertical drag → pitch (3D tilt).
-        // Swipe up = more tilt; swipe down = flatten.
-        DragHandler {
-            id: _pitchDrag
-            minimumPointCount: 2
-            maximumPointCount: 2
-            target: null
+        // Two-finger zoom / rotate / tilt from the raw touch points. Working
+        // with the actual finger positions (in px) gives a clean discriminator
+        // that PinchHandler's jittery activeScale never did:
+        //   • separation changes  → zoom (+ twist → rotate)
+        //   • fingers stay the same distance apart and move vertically → tilt
+        // The mode locks on the first decisive motion and never flips, so a
+        // tremor during zoom can't tilt, and a shove can't zoom.
+        MultiPointTouchArea {
+            id: _twoFinger
+            anchors.fill: parent
             enabled: root.interactive
-            property real _startTilt: 0
-            onActiveChanged: if (active) _startTilt = _map.tilt
-            onTranslationChanged: {
-                if (!active) return
-                _map.tilt = Math.max(0, Math.min(45,
-                    _startTilt - translation.y * 0.35))
+            minimumTouchPoints: 2
+            maximumTouchPoints: 2
+            mouseEnabled: false
+            touchPoints: [ TouchPoint { id: _tpA }, TouchPoint { id: _tpB } ]
+
+            property real   _d0: 1
+            property real   _cy0: 0
+            property real   _ang0: 0
+            property real   _startZoom: 14
+            property real   _startTilt: 0
+            property real   _startBearing: 0
+            property string _mode: ""        // "" | zoom | tilt
+
+            function _dist()  { const dx = _tpB.x - _tpA.x, dy = _tpB.y - _tpA.y
+                                return Math.max(1, Math.sqrt(dx*dx + dy*dy)) }
+            function _cy()    { return (_tpA.y + _tpB.y) / 2 }
+            function _angle() { return Math.atan2(_tpB.y - _tpA.y, _tpB.x - _tpA.x) * 180 / Math.PI }
+
+            onPressed: {
+                _d0 = _dist(); _cy0 = _cy(); _ang0 = _angle()
+                _startZoom = _map.zoomLevel; _startTilt = _map.tilt; _startBearing = _map.bearing
+                _mode = ""
             }
+            onUpdated: {
+                const d = _dist(), cy = _cy()
+                const sepDev  = Math.abs(d - _d0)          // px the fingers spread/closed
+                const vertDev = Math.abs(cy - _cy0)        // px the pair moved vertically
+
+                if (_mode === "") {
+                    if      (sepDev > 24)                  _mode = "zoom"
+                    else if (vertDev > 34 && sepDev < 14)  _mode = "tilt"
+                    else return                            // not decisive yet
+                }
+
+                if (_mode === "zoom") {
+                    _map.zoomLevel = Math.max(2, Math.min(19,
+                        _startZoom + Math.log(d / _d0) / Math.log(2)))
+                    let b = _startBearing - (_angle() - _ang0)
+                    while (b < 0)   b += 360
+                    while (b > 360) b -= 360
+                    _map.bearing = b
+                } else if (_mode === "tilt") {
+                    _map.tilt = Math.max(0, Math.min(45,
+                        _startTilt - (cy - _cy0) * 0.30))
+                }
+            }
+            onReleased: _mode = ""
         }
 
         WheelHandler {
@@ -686,11 +951,17 @@ Item {
             }
         }
 
+        // Double-tap zooms; a single tap on empty map drops a pin (exactly how
+        // Tesla's map works — long-press isn't usable on this eGalax panel,
+        // whose firmware anti-jitter can't report a sustained hold). POI markers
+        // consume their own taps, so this only fires on bare map.
         TapHandler {
+            id: _tap
             enabled: root.interactive
             gesturePolicy: TapHandler.ReleaseWithinBounds
             onDoubleTapped: _map.zoomLevel = Math.min(19, _map.zoomLevel + 1)
         }
+
 
 
         // ── GPS pose marker ──────────────────────────────────────────────────
@@ -785,6 +1056,33 @@ Item {
             }
         }
 
+        // ── Dropped pin (long-press) ──────────────────────────────────────────
+        MapQuickItem {
+            visible: root._selectedPoi && root._selectedPoi._dropped === true
+            coordinate: visible
+                ? QtPositioning.coordinate(root._selectedPoi.lat, root._selectedPoi.lon)
+                : QtPositioning.coordinate(0, 0)
+            anchorPoint.x: 16; anchorPoint.y: 40
+            z: 5
+            sourceItem: Item {
+                width: 32; height: 40
+                Rectangle {       // tip
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top; anchors.topMargin: 20
+                    width: 12; height: 12; rotation: 45
+                    color: "#D32F2F"; border.color: "white"; border.width: 2; z: -1
+                }
+                Rectangle {       // head
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                    width: 30; height: 30; radius: 15
+                    color: "#D32F2F"; border.color: "white"; border.width: 2
+                    Rectangle { anchors.centerIn: parent; width: 10; height: 10
+                                radius: 5; color: "white" }
+                }
+            }
+        }
+
         // ── Destination pin ──────────────────────────────────────────────────
         MapQuickItem {
             visible: root.hasDestination
@@ -838,36 +1136,59 @@ Item {
             opacity: 0.85
         }
 
-        // ── POI markers ──────────────────────────────────────────────────────
+        // ── POI markers (importance + collision declutter, Google-style) ─────
+        // RoadInfo.clusters yields a "point" (full marker) for prominent POIs
+        // and a "dot" (minor) for the rest that survive collision; dots promote
+        // to full markers as you zoom in. Icons are plain white Images (no
+        // MultiEffect shader per marker → cheap at scale).
         MapItemView {
-            model: RoadInfo.poisVisible ? RoadInfo.pois : []
+            model: RoadInfo.poisVisible ? RoadInfo.clusters : []
             delegate: MapQuickItem {
                 required property var modelData
-                readonly property bool _sel: root._selectedPoi
+                readonly property bool _isDot: modelData.type === "dot"
+                readonly property bool _sel: !!root._selectedPoi
                     && root._selectedPoi.lat === modelData.lat
                     && root._selectedPoi.lon === modelData.lon
-                // Hide the POI dot that is the active destination — the
-                // teardrop pin already marks it, avoid stacking both.
                 readonly property bool _isDest: root.hasDestination
                     && Math.abs(root.destination.latitude  - modelData.lat) < 1e-7
                     && Math.abs(root.destination.longitude - modelData.lon) < 1e-7
                 visible: !_isDest
                 coordinate: QtPositioning.coordinate(modelData.lat, modelData.lon)
-                anchorPoint.x: _sel ? 18 : 14; anchorPoint.y: _sel ? 18 : 14
-                z: _sel ? 10 : 0
-                sourceItem: Rectangle {
-                    width: _sel ? 36 : 28; height: width; radius: width / 2
-                    color: root._poiColor(modelData.category)
-                    border.color: "white"; border.width: _sel ? 3 : 2
-                    Behavior on width { NumberAnimation { duration: 120 } }
-                    SvgIcon {
-                        anchors.centerIn: parent
-                        size: parent.width * 0.58; color: "white"
-                        source: root._poiIcon(modelData.category)
+                anchorPoint.x: width / 2; anchorPoint.y: height / 2
+                z: _sel ? 10 : (_isDot ? 0 : 1)
+
+                sourceItem: Loader {
+                    sourceComponent: _isDot ? _dotDelegate : _pointDelegate
+                }
+
+                // Full marker — colored disc + white icon.
+                Component {
+                    id: _pointDelegate
+                    Rectangle {
+                        width: _sel ? 36 : 28; height: width; radius: width / 2
+                        color: root._poiColor(modelData.category)
+                        border.color: "white"; border.width: _sel ? 3 : 2
+                        Behavior on width { NumberAnimation { duration: 120 } }
+                        Image {
+                            anchors.centerIn: parent
+                            width: parent.width * 0.58; height: width
+                            source: root._poiIcon(modelData.category)
+                            sourceSize.width: 32; sourceSize.height: 32
+                            fillMode: Image.PreserveAspectFit; smooth: true
+                        }
+                        MouseArea { anchors.fill: parent
+                                    onClicked: root._selectedPoi = modelData }
                     }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: root._selectedPoi = modelData
+                }
+                // Minor POI — small category-colored dot, still tappable.
+                Component {
+                    id: _dotDelegate
+                    Rectangle {
+                        width: 12; height: 12; radius: 6
+                        color: root._poiColor(modelData.category)
+                        border.color: "white"; border.width: 1.5
+                        MouseArea { anchors.fill: parent
+                                    onClicked: root._selectedPoi = modelData }
                     }
                 }
             }
@@ -951,17 +1272,21 @@ Item {
         }
     }
 
-    // ── POI side panel (tap a place → details + actions) — Tesla style ────────
+    // ── POI card (tap a place / drop a pin → details + actions) — Tesla style ─
+    // Floating card on the LEFT, sitting under the search bar so search and the
+    // selected-place card share the same column like the Model 3/Y.
     Rectangle {
         id: _poiCard
         visible: root._selectedPoi !== null
         z: 950
         anchors {
-            right: parent.right; top: parent.top; bottom: parent.bottom
-            rightMargin: Theme.spaceL; topMargin: Theme.spaceL
-            bottomMargin: Theme.spaceL + root.bottomOffset
+            left: parent.left; top: parent.top
+            leftMargin: Theme.spaceL
+            topMargin: Theme.spaceL + Theme.btnMedium + Theme.spaceS
         }
-        width: 360
+        width: 340
+        height: Math.min(_poiCol.implicitHeight + 2 * Theme.spaceL,
+                         parent.height - anchors.topMargin - Theme.spaceL - root.bottomOffset)
         radius: Theme.radiusL
         color: System.surface
         border.color: System.border; border.width: 1
@@ -974,15 +1299,15 @@ Item {
             ? QtPositioning.coordinate(poi.lat, poi.lon).distanceTo(GPS.coordinate) : -1
         readonly property string distStr: distM < 0 ? ""
             : (distM >= 1000 ? (distM/1000).toFixed(1) + " km" : Math.round(distM) + " m")
-        readonly property bool hasPhone: poi.phone && ("" + poi.phone).length > 0
-        readonly property bool hasWeb:   poi.website && ("" + poi.website).length > 0
-        readonly property bool hasAddr:  poi.address && ("" + poi.address).length > 0
+        readonly property bool hasPhone: !!poi.phone   && ("" + poi.phone).length > 0
+        readonly property bool hasWeb:   !!poi.website && ("" + poi.website).length > 0
+        readonly property bool hasAddr:  !!poi.address && ("" + poi.address).length > 0
         property bool fav: false
         onPoiChanged: fav = root._selectedPoi
                         ? RoadInfo.isFavorite(poi.lat, poi.lon) : false
 
-        // slide-in from the right
-        transform: Translate { x: _poiCard.visible ? 0 : 40
+        // slide-in from the left
+        transform: Translate { x: _poiCard.visible ? 0 : -40
             Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } } }
 
         Flickable {
@@ -1035,7 +1360,7 @@ Item {
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root._poiCatLabel(_poiCard.poi.category)
+                        text: root._poiLabel(_poiCard.poi)
                               + (_poiCard.distStr ? "   ·   " + _poiCard.distStr : "")
                         color: System.textSecondary; font.pixelSize: 14
                     }
@@ -1246,6 +1571,48 @@ Item {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // ── Current-location indicator (Tesla-style) — street · area ──────────────
+    // Reverse-geocoded from the GPS fix; hidden entirely when there's no fix
+    // or no address (Tesla does the same when location is unavailable).
+    Rectangle {
+        id: _locPill
+        visible: GPS.valid && root._curStreet !== "" && !RoadInfo.cameraAlert
+                 && !root.poiPanelOpen
+        anchors {
+            horizontalCenter: parent.horizontalCenter
+            bottom: parent.bottom
+            bottomMargin: Theme.spaceL + root.bottomOffset
+        }
+        width: _locCol.width + Theme.spaceL * 2
+        height: _locCol.height + Theme.spaceS * 2
+        radius: Theme.radiusM
+        color: System.surface
+        opacity: 0.94
+        border.color: System.border; border.width: 1
+
+        Column {
+            id: _locCol
+            anchors.centerIn: parent
+            spacing: 1
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: root._curStreet
+                color: System.textPrimary
+                font.pixelSize: 15; font.weight: Font.Bold
+                elide: Text.ElideRight
+                width: Math.min(implicitWidth, 360)
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: root._curArea !== ""
+                text: root._curArea
+                color: System.textSecondary; font.pixelSize: 12
+                elide: Text.ElideRight
+                width: Math.min(implicitWidth, 360)
             }
         }
     }

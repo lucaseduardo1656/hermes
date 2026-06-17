@@ -88,7 +88,6 @@ qt_add_qml_module(elise
         ui/SettingsPageBluetooth.qml
         ui/SettingsPageBluetoothList.qml
         ui/SoftKeyboard.qml
-        ui/KeyboardKey.qml
         ui/Keyboard.qml
         ui/ActionSheet.qml
         ui/MapBridge.qml
@@ -155,6 +154,16 @@ qt_add_resources(elise "elise_icons"
         icons/globe.svg
         icons/star.svg
         icons/clock.svg
+        icons/chevron-left.svg
+        icons/shift.svg
+        icons/home.svg
+        icons/work.svg
+        icons/church.svg
+        icons/park.svg
+        icons/school.svg
+        icons/attraction.svg
+        icons/beauty.svg
+        icons/gym.svg
 )
 
 target_link_libraries(elise PRIVATE

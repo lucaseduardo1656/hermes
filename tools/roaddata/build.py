@@ -164,20 +164,8 @@ def ingest(conn, payload):
             cams += 1
             continue
 
-        # POIs (node lat/lon, or way/relation centroid).
-        cat = normalize_category(tags)
-        if cat:
-            if t == "node":
-                la, lo = el.get("lat"), el.get("lon")
-            else:
-                c = centroid(el.get("geometry"))
-                la, lo = (c if c else (el.get("center", {}).get("lat"),
-                                       el.get("center", {}).get("lon")))
-            if la is not None and lo is not None:
-                # OSM ids collide across node/way namespaces; offset ways.
-                uid = oid if t == "node" else (oid + 10_000_000_000)
-                add_poi(conn, la, lo, cat, tags, uid)
-                pois += 1
+        # POIs come from Overture (build_places.py) — far better coverage than
+        # OSM. build.py only contributes roads + speed cameras now.
     return segs, cams, pois
 
 

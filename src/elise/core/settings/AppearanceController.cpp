@@ -3,15 +3,16 @@
 #include <QVariantMap>
 
 namespace {
-constexpr const char *kBaseUrl = "https://tiles.openfreemap.org/styles/";
-constexpr const char *kDefault = "liberty";
+// Two local Tesla-style vector styles (3D buildings, no basemap POIs — only
+// ours show). Light is the default; dark mirrors the Model 3/Y night map.
+// Built by tools/roaddata/make_map_styles.py and shipped in the board overlay.
+constexpr const char *kLocalDir = "file:///usr/share/hermes/styles/";
+constexpr const char *kDefault  = "map-light";
 
 struct StyleDef { const char *key; const char *label; };
 static const StyleDef kStyles[] = {
-    { "liberty",  "Liberty (3D buildings)" },
-    { "dark",     "Dark (minimalista)"     },
-    { "positron", "Positron (claro)"       },
-    { "bright",   "Bright (vívido)"        },
+    { "map-light", "Claro (3D)" },
+    { "map-dark",  "Escuro (3D)" },
 };
 }
 
@@ -63,7 +64,7 @@ void AppearanceController::setAnimationsEnabled(bool on) {
 }
 
 QString AppearanceController::mapStyleUrl() const {
-    return QString::fromLatin1(kBaseUrl) + m_mapStyle;
+    return QString::fromLatin1(kLocalDir) + m_mapStyle + QStringLiteral(".json");
 }
 
 QVariantList AppearanceController::mapStyleOptions() const {

@@ -37,18 +37,36 @@ Window {
      || root.playerState !== "collapsed"
 
     // ── Map ──────────────────────────────────────────────────────────────────
-    // MapLibre reads its style at Plugin construction, so changing
-    // styles at runtime means destroying and re-creating CarMap.
-    // A Loader keyed on the style URL is the cheapest way to do that:
-    // toggling `active` tears the old map down and rebuilds with the
-    // new URL.
+    // MapLibre reads its style at Plugin construction, so changing styles at
+    // runtime means destroying and re-creating CarMap. Before the rebuild we
+    // snapshot the camera + active destination and restore them on the new map
+    // so a theme change doesn't reset the zoom/tilt or break an active route.
+    property var _mapRestore: null
     Loader {
         id: _mapLoader
         anchors.fill: parent
         z: 0
         sourceComponent: _mapComponent
         property string _styleUrl: Settings.appearance.mapStyleUrl
-        on_StyleUrlChanged: { active = false; active = true }
+        on_StyleUrlChanged: {
+            if (item) {
+                root._mapRestore = {
+                    cam:       item.cameraState(),
+                    dest:      item.destination,
+                    destName:  item.destinationName,
+                    navStarted: item.navStarted
+                }
+            }
+            active = false; active = true
+        }
+        onLoaded: if (root._mapRestore) {
+            const s = root._mapRestore; root._mapRestore = null
+            item.applyCamera(s.cam)
+            if (s.dest) {
+                item.setDestination(s.dest, s.destName)
+                if (s.navStarted) item.startNavigation()
+            }
+        }
     }
     // Alias for the rest of Main.qml — search bar, summary, etc.
     // bind through `_map`.
@@ -84,7 +102,9 @@ Window {
         }
         spacing: Theme.spaceS
         z: 700
-        visible: root.playerState !== "expanded"
+        // Hidden while the POI card occupies the left column, so the search /
+        // nav banner / route preview never stack under it.
+        visible: root.playerState !== "expanded" && !root._poiPanelOpen
 
         MapSearchBar {
             id: _mapSearch
@@ -99,38 +119,86 @@ Window {
             visible: Nav.active
         }
 
+        // Route preview — shown after picking a destination, before the trip
+        // starts. ETA + distance + a prominent "Iniciar" button. Once the
+        // trip is running the NavigationOverlay above takes over.
         Rectangle {
-            id: _routeSummary
+            id: _routePreview
             width: 320
-            height: Theme.btnLarge
-            visible: _map && _map.hasDestination && _map.routeDistanceM > 0
+            height: _previewCol.implicitHeight + Theme.spaceL * 2
+            visible: _map && _map.hasDestination && _map.routeDistanceM > 0 && !_map.navStarted
             radius: Theme.radiusL
             color: System.surface
             border.color: System.border
             border.width: 1
-            Row {
-                anchors { fill: parent; leftMargin: Theme.spaceL; rightMargin: Theme.spaceL }
-                spacing: Theme.spaceL
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: {
-                        if (!_map) return ""
-                        const m = _map.routeDistanceM
-                        if (Settings.appearance.units === "imperial") {
-                            const mi = m / 1609.344
-                            return mi.toFixed(1) + " mi"
+
+            readonly property real _durMin: _map ? _map.routeDurationS / 60 : 0
+            readonly property string _eta: {
+                const d = new Date(Date.now() + (_map ? _map.routeDurationS : 0) * 1000)
+                return Qt.formatTime(d, "HH:mm")
+            }
+            readonly property string _distStr: {
+                if (!_map) return ""
+                const m = _map.routeDistanceM
+                return Settings.appearance.units === "imperial"
+                    ? (m / 1609.344).toFixed(1) + " mi" : (m / 1000).toFixed(1) + " km"
+            }
+
+            Column {
+                id: _previewCol
+                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
+                          leftMargin: Theme.spaceL; rightMargin: Theme.spaceL }
+                spacing: Theme.spaceM
+
+                Row {
+                    width: parent.width
+                    Column {
+                        width: parent.width - _etaCol.width
+                        spacing: 1
+                        Text {
+                            text: Math.round(_routePreview._durMin) + " min"
+                            color: System.textPrimary
+                            font.pixelSize: Theme.fontTitle; font.weight: Font.Bold
                         }
-                        return (m / 1000).toFixed(1) + " km"
+                        Text {
+                            text: _routePreview._distStr + "  ·  chegada " + _routePreview._eta
+                            color: System.textSecondary; font.pixelSize: Theme.fontLabel
+                        }
                     }
-                    color: System.textPrimary
-                    font.pixelSize: Theme.fontBody
-                    font.weight: Font.Medium
+                    Item { id: _etaCol; width: 0; height: 1 }
                 }
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: _map ? Math.round(_map.routeDurationS / 60) + " min" : ""
-                    color: System.textSecondary
-                    font.pixelSize: Theme.fontBody
+
+                Row {
+                    width: parent.width
+                    spacing: Theme.spaceS
+
+                    Rectangle {
+                        width: parent.width - _cancelBtn.width - parent.spacing
+                        height: 48; radius: Theme.radiusM
+                        color: _goArea.pressed ? System.accentDim : System.accent
+                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                        Row {
+                            anchors.centerIn: parent; spacing: Theme.spaceS
+                            SvgIcon { anchors.verticalCenter: parent.verticalCenter
+                                      size: 20; color: "#000000"
+                                      source: "qrc:/icons/arrow-straight.svg" }
+                            Text { anchors.verticalCenter: parent.verticalCenter
+                                   text: "Iniciar"; color: "#000000"
+                                   font.pixelSize: Theme.fontBody; font.weight: Font.Bold }
+                        }
+                        MouseArea { id: _goArea; anchors.fill: parent
+                                    onClicked: if (_map) _map.startNavigation() }
+                    }
+                    Rectangle {
+                        id: _cancelBtn
+                        width: 48; height: 48; radius: Theme.radiusM
+                        color: _cxArea.pressed ? System.surface2 : "transparent"
+                        border.color: System.border; border.width: 1
+                        SvgIcon { anchors.centerIn: parent; size: 18
+                                  color: System.textSecondary; source: "qrc:/icons/close.svg" }
+                        MouseArea { id: _cxArea; anchors.fill: parent
+                                    onClicked: if (_map) _map.clearDestination() }
+                    }
                 }
             }
         }
@@ -151,18 +219,12 @@ Window {
         }
         spacing: Theme.spaceL
         z: 600
-        visible: root.playerState !== "expanded" && !root._poiPanelOpen
+        visible: root.playerState !== "expanded"
 
         Fab {     // summon player — only when it's hidden
             icon: "qrc:/icons/music-note.svg"
             visible: !root._playerVisible
             onClicked: root.playerState = "half"
-        }
-        Fab {     // toggle nearby places
-            icon: "qrc:/icons/place.svg"
-            color:     RoadInfo.poisVisible ? System.accent : System.surface
-            iconColor: RoadInfo.poisVisible ? "#000000" : System.textSecondary
-            onClicked: RoadInfo.poisVisible = !RoadInfo.poisVisible
         }
         CompassRose {     // recenter + snap-to-north
             bearing: _map ? _map.bearing : 0
@@ -216,6 +278,18 @@ Window {
     SettingsMenu {
         id: _settings
         z: 1200
+    }
+
+    // Bare-mode dismiss catcher: while the map-search keyboard is up (no dim
+    // overlay), a tap on the map should close it. Sits below the search stack
+    // (z 700) so suggestions still receive taps, above the map so map taps
+    // dismiss. The keyboard tray (z 1400) stays on top of this.
+    MouseArea {
+        anchors.fill: parent
+        z: 650
+        visible: Keyboard.active && Keyboard.bare
+        enabled: visible
+        onClicked: Keyboard.dismiss()
     }
 
     // ── Global on-screen keyboard ────────────────────────────────────────────

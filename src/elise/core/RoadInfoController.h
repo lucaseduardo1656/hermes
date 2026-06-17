@@ -29,12 +29,23 @@ class RoadInfoController : public QObject {
     Q_PROPERTY(bool         cameraAlert       READ cameraAlert       NOTIFY roadChanged)
 
     // ── POIs ─────────────────────────────────────────────────────────────
-    Q_PROPERTY(QVariantList pois        READ pois        NOTIFY poisChanged)
+    // Viewport-clustered markers (Supercluster-style grid by zoom). Each entry
+    // is either {type:"point", ...poi} or {type:"cluster", lat, lon, count}.
+    Q_PROPERTY(QVariantList clusters    READ clusters    NOTIFY clustersChanged)
     Q_PROPERTY(bool         poisVisible READ poisVisible WRITE setPoisVisible NOTIFY poisVisibleChanged)
 
     // ── Coverage / status ────────────────────────────────────────────────
     Q_PROPERTY(bool dataReady   READ dataReady   NOTIFY dataReadyChanged)
     Q_PROPERTY(bool downloading READ downloading NOTIFY downloadingChanged)
+
+    // ── Saved places (search shortcuts) ──────────────────────────────────
+    Q_PROPERTY(QVariantList favorites READ favorites NOTIFY favoritesChanged)
+    Q_PROPERTY(QVariantList recents   READ recents   NOTIFY recentsChanged)
+    Q_PROPERTY(QVariantMap  home      READ home      NOTIFY placesChanged)
+    Q_PROPERTY(QVariantMap  work      READ work      NOTIFY placesChanged)
+    // While non-empty ("home"/"work") the next picked place is saved to that
+    // slot instead of routed to.
+    Q_PROPERTY(QString pendingPlace READ pendingPlace NOTIFY pendingPlaceChanged)
 
 public:
     explicit RoadInfoController(QObject *parent = nullptr);
@@ -45,8 +56,13 @@ public:
     double nearestCameraDist() const { return m_nearestCamDist; }
     int  nearestCameraLimit() const { return m_nearestCamLimit; }
     bool cameraAlert()        const { return m_cameraAlert; }
-    QVariantList pois()       const { return m_poisView; }
+    QVariantList clusters()   const { return m_clustersView; }
     bool poisVisible()        const { return m_poisVisible; }
+
+    // Recluster the POIs inside the current map viewport for the given zoom.
+    // Called (debounced) by CarMap whenever the map pans/zooms.
+    Q_INVOKABLE void updateViewport(double minLat, double minLon,
+                                    double maxLat, double maxLon, double zoom);
     bool dataReady()          const { return m_dataReady; }
     bool downloading()        const { return m_downloading; }
 
@@ -55,18 +71,41 @@ public:
     // Wire to a GpsController; connects to positionChanged internally.
     void attachGps(GpsController *gps);
 
+    QVariantList favorites()  const;
+    QVariantList recents()    const;
+    QVariantMap  home()       const;
+    QVariantMap  work()       const;
+    QString      pendingPlace() const { return m_pendingPlace; }
+
     // Favorites (persisted in QSettings, keyed by rounded lat/lon).
     Q_INVOKABLE bool isFavorite(double lat, double lon) const;
-    Q_INVOKABLE void toggleFavorite(double lat, double lon, const QString &name);
+    Q_INVOKABLE void toggleFavorite(double lat, double lon,
+                                    const QString &name, const QString &category = QString());
+
+    // Recents — most-recent-first, capped. Pushed on every navigation.
+    Q_INVOKABLE void addRecent(double lat, double lon,
+                               const QString &name, const QString &address);
+    Q_INVOKABLE void clearRecents();
+
+    // Home / Work slots. beginSetPlace puts the UI in "pick" mode; savePlace
+    // commits the chosen coordinate; the QML reads pendingPlace to decide
+    // whether a tap saves or routes.
+    Q_INVOKABLE void beginSetPlace(const QString &which);   // "home"|"work"|""
+    Q_INVOKABLE void cancelSetPlace();
+    Q_INVOKABLE void savePlace(const QString &which, double lat, double lon,
+                               const QString &name);
 
 signals:
     void roadChanged();
     void camerasChanged();
-    void poisChanged();
+    void clustersChanged();
     void poisVisibleChanged();
     void dataReadyChanged();
     void downloadingChanged();
     void favoritesChanged();
+    void recentsChanged();
+    void placesChanged();
+    void pendingPlaceChanged();
 
 private:
     void onPosition(double lat, double lon, double speedMps, double course, bool dirValid);
@@ -87,15 +126,17 @@ private:
     bool   m_overLimit      = false;
     double m_lastSpeedKph   = 0;
 
-    // Camera state
-    QVariantList m_camerasView;        // {lat, lon, maxspeed} within working radius
+    // Camera state — GPS-radius markers + proximity alert.
+    QVariantList m_camerasView;
     double m_nearestCamDist = -1;
     int    m_nearestCamLimit = 0;
     bool   m_cameraAlert    = false;
 
-    // POI state
-    QVariantList m_poisView;
-    bool   m_poisVisible    = false;
+    // POI state — clustered for the current viewport. Always on now (the
+    // basemap has no POIs of its own), so there's no toggle.
+    QVariantList m_clustersView;
+    bool   m_poisVisible    = true;
+    double m_vpMinLat = 0, m_vpMinLon = 0, m_vpMaxLat = 0, m_vpMaxLon = 0, m_vpZoom = 0;
 
     // Coverage / housekeeping
     bool   m_dataReady      = false;
@@ -105,4 +146,7 @@ private:
     double m_lastLimitLat   = 1000;
     double m_lastLimitLon   = 1000;
     QSet<QPair<int,int>> m_pendingTiles;   // tiles currently downloading/failed-recent
+
+    // Saved-places state
+    QString m_pendingPlace;                // "", "home" or "work"
 };
