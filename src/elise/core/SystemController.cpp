@@ -7,7 +7,7 @@ struct Accent { const char *key; const char *label; const char *base; const char
 
 // Four accent presets. "gold" is the Elise default.
 static const Accent kAccents[] = {
-    { "gold",  "Dourado Elise", "#C6A75E", "#9A7F44" },
+    { "gold",  "Areia Elise",   "#D9C7A0", "#AE9F80" },
     { "teal",  "Teal",          "#3DB0A8", "#2C7E78" },
     { "blue",  "Azul cobalto",  "#3E7BFA", "#2A55B0" },
     { "red",   "Vermelho",      "#E5484D", "#A53236" },

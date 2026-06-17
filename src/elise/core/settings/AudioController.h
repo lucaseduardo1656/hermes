@@ -15,6 +15,7 @@
 class AudioController : public QObject {
     Q_OBJECT
     Q_PROPERTY(int          volume        READ volume        WRITE setVolume        NOTIFY volumeChanged)
+    Q_PROPERTY(bool         muted         READ muted         WRITE setMuted         NOTIFY mutedChanged)
     Q_PROPERTY(QString      eqPreset      READ eqPreset      WRITE setEqPreset      NOTIFY eqPresetChanged)
     Q_PROPERTY(bool         resumeOnStart READ resumeOnStart WRITE setResumeOnStart NOTIFY resumeOnStartChanged)
     Q_PROPERTY(bool         spatialAudio  READ spatialAudio  WRITE setSpatialAudio  NOTIFY spatialAudioChanged)
@@ -24,6 +25,7 @@ public:
     explicit AudioController(QObject *parent = nullptr);
 
     int          volume()        const { return m_volume; }
+    bool         muted()         const { return m_muted; }
     QString      eqPreset()      const { return m_eqPreset; }
     bool         resumeOnStart() const { return m_resumeOnStart; }
     bool         spatialAudio()  const { return m_spatialAudio; }
@@ -34,21 +36,25 @@ public:
 
 public slots:
     void setVolume(int v);
+    void setMuted(bool on);
     void setEqPreset(const QString &key);
     void setResumeOnStart(bool on);
     void setSpatialAudio(bool on);
 
 signals:
     void volumeChanged();
+    void mutedChanged();
     void eqPresetChanged();
     void resumeOnStartChanged();
     void spatialAudioChanged();
 
 private:
     void applyAlsaVolume(int v);
+    void applyMute(bool on);
 
     QSettings m_settings;
     int     m_volume        = 70;
+    bool    m_muted         = false;
     QString m_eqPreset;
     bool    m_resumeOnStart = true;
     bool    m_spatialAudio  = false;

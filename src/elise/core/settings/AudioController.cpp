@@ -43,9 +43,11 @@ AudioController::AudioController(QObject *parent)
 
     const int persisted = m_settings.value(QStringLiteral("volume"), 70).toInt();
     m_volume = qBound(0, persisted, 100);
+    m_muted  = m_settings.value(QStringLiteral("muted"), false).toBool();
     m_settings.sync();
 
     applyAlsaVolume(m_volume);
+    applyMute(m_muted);
 }
 
 QVariantList AudioController::eqOptions() const {
@@ -74,6 +76,24 @@ void AudioController::setVolume(int v) {
     m_settings.sync();
     applyAlsaVolume(v);
     emit volumeChanged();
+}
+
+void AudioController::setMuted(bool on) {
+    if (on == m_muted) return;
+    m_muted = on;
+    m_settings.setValue(QStringLiteral("muted"), on);
+    m_settings.sync();
+    applyMute(on);
+    emit mutedChanged();
+}
+
+void AudioController::applyMute(bool on) {
+    QProcess::startDetached(
+        QStringLiteral("wpctl"),
+        { QStringLiteral("set-mute"),
+          QStringLiteral("@DEFAULT_AUDIO_SINK@"),
+          on ? QStringLiteral("1") : QStringLiteral("0") }
+    );
 }
 
 void AudioController::setEqPreset(const QString &key) {

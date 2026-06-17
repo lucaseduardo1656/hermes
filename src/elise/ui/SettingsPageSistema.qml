@@ -1,16 +1,13 @@
 import QtQuick
 import Elise
 
-// Page: Sistema — atualizações, armazenamento, info, reiniciar.
+// Page: About — Caelestia layout (#22/#23). A hero card with the Elise logo +
+// version, then grouped info rows (Sistema / Software) and the power actions.
 //
-// Bound to `Settings.sys` (SystemInfoController), which talks to the
-// hermes-systemd daemon via D-Bus. When the daemon is offline the page
-// renders dashes so it's obvious the bus link is down rather than showing
-// stale numbers.
-Flickable {
+// Bound to `Settings.sys` (SystemInfoController) over D-Bus; dashes render when
+// the daemon link is down rather than showing stale numbers.
+Item {
     id: root
-    contentWidth:  width
-    contentHeight: _col.implicitHeight + Theme.spaceXL * 2
     clip: true
 
     function _formatGB(bytes) {
@@ -27,99 +24,174 @@ Flickable {
         return m + "m"
     }
 
-    Column {
-        id: _col
-        anchors {
-            top: parent.top; topMargin: Theme.spaceXL
-            left: parent.left; leftMargin: Theme.spaceXL
-            right: parent.right; rightMargin: Theme.spaceXL
-        }
-        spacing: Theme.spaceXL
+    readonly property var _system: [
+        { label: "Hostname",      value: Settings.sys.hostname || "—" },
+        { label: "Dispositivo",   value: "Raspberry Pi 5" },
+        { label: "Distribuição",  value: Settings.sys.osVersion || "—" },
+        { label: "Kernel",        value: Settings.sys.kernelVersion || "—" },
+        { label: "Armazenamento", value: _formatGB(Settings.sys.storageUsedBytes)
+                                          + " / " + _formatGB(Settings.sys.storageTotalBytes) },
+        { label: "Tempo ligado",  value: _formatUptime(Settings.sys.uptimeSeconds) }
+    ]
+    readonly property var _software: [
+        { label: "Elise",  value: Settings.sys.appVersion || "—" },
+        { label: "Qt",     value: "6.8.1" },
+        { label: "Daemon", value: Settings.sys.online ? "conectado" : "desconectado" }
+    ]
 
-        SettingsCard {
-            title: "Manutenção"
+    Flickable {
+        anchors.fill: parent
+        contentHeight: _col.height
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
 
-            SettingsAction { label: "Atualizações";  sublabel: "Sistema atualizado" }
-            SettingsAction {
-                label:    "Armazenamento"
-                sublabel: root._formatGB(Settings.sys.storageUsedBytes)
-                          + " usado de "
-                          + root._formatGB(Settings.sys.storageTotalBytes)
-            }
-        }
+        Column {
+            id: _col
+            width: parent.width
+            spacing: Theme.spaceL
 
-        SettingsCard {
-            title: "Sobre"
+            // ── Hero card ─────────────────────────────────────────────────
+            Rectangle {
+                width: parent.width; height: 220
+                radius: Theme.radiusL
+                color: Qt.rgba(1, 1, 1, 0.05)
+                Column {
+                    anchors.centerIn: parent
+                    spacing: Theme.spaceS
+                    SvgIcon {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        source: "qrc:/icons/elise-logo.svg"
+                        color: System.accent; size: 64
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "Elise"; color: System.textPrimary
+                        font.pixelSize: 34; font.weight: Font.Bold
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "v" + (Settings.sys.appVersion || "0.1")
+                        color: System.textSecondary; font.pixelSize: Theme.fontBody
+                    }
+                }
+            }
 
-            SettingsAction {
-                label:    "Sistema operacional"
-                sublabel: Settings.sys.osVersion || "—"
+            // ── Sistema group ─────────────────────────────────────────────
+            Column {
+                width: parent.width
+                spacing: Theme.spaceS
+                Text { text: "Sistema"; color: System.textSecondary
+                       font.pixelSize: Theme.fontLabel; font.weight: Font.Medium
+                       leftPadding: Theme.spaceXS }
+                Rectangle {
+                    width: parent.width; height: _sysCol.height
+                    radius: Theme.radiusL; color: Qt.rgba(1, 1, 1, 0.05); clip: true
+                    Column {
+                        id: _sysCol
+                        width: parent.width
+                        Repeater {
+                            model: root._system
+                            delegate: Item {
+                                required property var modelData
+                                required property int index
+                                width: _sysCol.width; height: 52
+                                Text { anchors { left: parent.left; leftMargin: Theme.spaceL
+                                                 verticalCenter: parent.verticalCenter }
+                                       text: modelData.label; color: System.textPrimary
+                                       font.pixelSize: Theme.fontBody }
+                                Text { anchors { right: parent.right; rightMargin: Theme.spaceL
+                                                 verticalCenter: parent.verticalCenter }
+                                       text: modelData.value; color: System.textSecondary
+                                       font.pixelSize: Theme.fontBody }
+                                Rectangle { visible: index < root._system.length - 1
+                                            anchors { left: parent.left; right: parent.right
+                                                      leftMargin: Theme.spaceL; rightMargin: Theme.spaceL
+                                                      bottom: parent.bottom }
+                                            height: 1; color: Qt.rgba(1, 1, 1, 0.06) }
+                            }
+                        }
+                    }
+                }
             }
-            SettingsAction {
-                label:    "Aplicação"
-                sublabel: "Elise " + (Settings.sys.appVersion || "—")
-            }
-            SettingsAction {
-                label:    "Kernel"
-                sublabel: Settings.sys.kernelVersion || "—"
-            }
-            SettingsAction {
-                label:    "Hostname"
-                sublabel: Settings.sys.hostname || "—"
-            }
-            SettingsAction {
-                label:    "Uptime"
-                sublabel: root._formatUptime(Settings.sys.uptimeSeconds)
-            }
-            SettingsAction {
-                label:    "Daemon"
-                sublabel: Settings.sys.online ? "conectado" : "desconectado"
-            }
-        }
 
-        SettingsCard {
-            title: "Preferências"
+            // ── Software group ────────────────────────────────────────────
+            Column {
+                width: parent.width
+                spacing: Theme.spaceS
+                Text { text: "Software"; color: System.textSecondary
+                       font.pixelSize: Theme.fontLabel; font.weight: Font.Medium
+                       leftPadding: Theme.spaceXS }
+                Rectangle {
+                    width: parent.width; height: _swCol.height
+                    radius: Theme.radiusL; color: Qt.rgba(1, 1, 1, 0.05); clip: true
+                    Column {
+                        id: _swCol
+                        width: parent.width
+                        Repeater {
+                            model: root._software
+                            delegate: Item {
+                                required property var modelData
+                                required property int index
+                                width: _swCol.width; height: 52
+                                Text { anchors { left: parent.left; leftMargin: Theme.spaceL
+                                                 verticalCenter: parent.verticalCenter }
+                                       text: modelData.label; color: System.textPrimary
+                                       font.pixelSize: Theme.fontBody }
+                                Text { anchors { right: parent.right; rightMargin: Theme.spaceL
+                                                 verticalCenter: parent.verticalCenter }
+                                       text: modelData.value; color: System.textSecondary
+                                       font.pixelSize: Theme.fontBody }
+                                Rectangle { visible: index < root._software.length - 1
+                                            anchors { left: parent.left; right: parent.right
+                                                      leftMargin: Theme.spaceL; rightMargin: Theme.spaceL
+                                                      bottom: parent.bottom }
+                                            height: 1; color: Qt.rgba(1, 1, 1, 0.06) }
+                            }
+                        }
+                    }
+                }
+            }
 
-            SettingsAction {
-                label: "Unidades"
-                sublabel: Settings.appearance.units === "imperial"
-                            ? "Imperial (mi/ft)" : "Métrico (km/m)"
-                onTriggered: ActionSheet.show({
-                    title: "Unidades",
-                    items: [
-                        { label: "Métrico (km/m)",   onSelected: function() {
-                            Settings.appearance.setUnits("metric") } },
-                        { label: "Imperial (mi/ft)", onSelected: function() {
-                            Settings.appearance.setUnits("imperial") } }
-                    ]
-                })
+            // ── Energia group (power actions) ─────────────────────────────
+            Column {
+                width: parent.width
+                spacing: Theme.spaceS
+                Text { text: "Energia"; color: System.textSecondary
+                       font.pixelSize: Theme.fontLabel; font.weight: Font.Medium
+                       leftPadding: Theme.spaceXS }
+                Rectangle {
+                    width: parent.width; height: _pwrCol.height
+                    radius: Theme.radiusL; color: Qt.rgba(1, 1, 1, 0.05); clip: true
+                    Column {
+                        id: _pwrCol
+                        width: parent.width
+                        Item {
+                            width: parent.width; height: 56
+                            Rectangle { anchors.fill: parent
+                                        color: _rebootArea.pressed ? Qt.rgba(1,1,1,0.05) : "transparent" }
+                            Text { anchors { left: parent.left; leftMargin: Theme.spaceL
+                                             verticalCenter: parent.verticalCenter }
+                                   text: "Reiniciar"; color: System.textPrimary; font.pixelSize: Theme.fontBody }
+                            MouseArea { id: _rebootArea; anchors.fill: parent
+                                        onClicked: Settings.sys.reboot() }
+                            Rectangle { anchors { left: parent.left; right: parent.right
+                                                  leftMargin: Theme.spaceL; rightMargin: Theme.spaceL
+                                                  bottom: parent.bottom }
+                                        height: 1; color: Qt.rgba(1, 1, 1, 0.06) }
+                        }
+                        Item {
+                            width: parent.width; height: 56
+                            Rectangle { anchors.fill: parent
+                                        color: _offArea.pressed ? Qt.rgba(1,1,1,0.05) : "transparent" }
+                            Text { anchors { left: parent.left; leftMargin: Theme.spaceL
+                                             verticalCenter: parent.verticalCenter }
+                                   text: "Desligar"; color: System.danger; font.pixelSize: Theme.fontBody }
+                            MouseArea { id: _offArea; anchors.fill: parent
+                                        onClicked: Settings.sys.powerOff() }
+                        }
+                    }
+                }
             }
-            SettingsAction {
-                label: "Formato de hora"
-                sublabel: Settings.appearance.timeFormat === "12h"
-                            ? "12 horas" : "24 horas"
-                onTriggered: ActionSheet.show({
-                    title: "Formato de hora",
-                    items: [
-                        { label: "24 horas", onSelected: function() {
-                            Settings.appearance.setTimeFormat("24h") } },
-                        { label: "12 horas (AM/PM)", onSelected: function() {
-                            Settings.appearance.setTimeFormat("12h") } }
-                    ]
-                })
-            }
-        }
-
-        SettingsCard {
-            SettingsAction {
-                label: "Reiniciar sistema"
-                onTriggered: Settings.sys.reboot()
-            }
-            SettingsAction {
-                label: "Desligar sistema"
-                onTriggered: Settings.sys.powerOff()
-            }
-            SettingsToggle { label: "Modo desenvolvedor"; checked: false }
         }
     }
 }

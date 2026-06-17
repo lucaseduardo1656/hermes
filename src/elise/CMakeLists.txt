@@ -43,6 +43,10 @@ qt_add_executable(elise
     core/GpsController.cpp
     core/RoadInfoController.h
     core/RoadInfoController.cpp
+    core/components/WavyLine.h
+    core/components/WavyLine.cpp
+    core/components/LinearIndicatorManager.h
+    core/components/LinearIndicatorManager.cpp
 )
 
 set_source_files_properties(ui/Theme.qml PROPERTIES
@@ -55,6 +59,15 @@ set_source_files_properties(ui/ActionSheet.qml PROPERTIES
     QT_QML_SINGLETON_TYPE TRUE
 )
 set_source_files_properties(ui/MapBridge.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE TRUE
+)
+set_source_files_properties(ui/Tokens.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE TRUE
+)
+set_source_files_properties(ui/Colours.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE TRUE
+)
+set_source_files_properties(ui/CUtils.qml PROPERTIES
     QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -80,6 +93,7 @@ qt_add_qml_module(elise
         ui/SettingsRow.qml
         ui/SettingsAction.qml
         ui/SettingsToggle.qml
+        ui/SettingsSwitch.qml
         ui/SettingsPagePerfil.qml
         ui/SettingsPageContas.qml
         ui/SettingsPageVeiculo.qml
@@ -101,6 +115,38 @@ qt_add_qml_module(elise
         ui/SettingsSlider.qml
         ui/SettingsPageSistema.qml
         ui/SignalBars.qml
+        ui/Tokens.qml
+        ui/Colours.qml
+        ui/Anim.qml
+        ui/CAnim.qml
+        ui/StyledRect.qml
+        ui/StyledText.qml
+        ui/MaterialIcon.qml
+        ui/Elevation.qml
+        ui/FilledSlider.qml
+        ui/CUtils.qml
+        ui/StateLayer.qml
+        ui/CustomMouseArea.qml
+        ui/ButtonBase.qml
+        ui/IconButton.qml
+        ui/TextButton.qml
+        ui/StyledSwitch.qml
+        ui/ToggleRow.qml
+        ui/SwitchRow.qml
+        ui/StyledTextField.qml
+        ui/StyledInputField.qml
+        ui/StyledRadioButton.qml
+        ui/StyledScrollBar.qml
+        ui/IconTextButton.qml
+        ui/CollapsibleSection.qml
+        ui/SectionHeader.qml
+        ui/SectionContainer.qml
+        ui/PropertyRow.qml
+        ui/AnimLoader.qml
+        ui/AnchorAnim.qml
+        ui/StyledSlider.qml
+        ui/StyledProgressBar.qml
+        ui/CircularProgress.qml
 )
 
 qt_add_resources(elise "elise_icons"
@@ -158,12 +204,20 @@ qt_add_resources(elise "elise_icons"
         icons/shift.svg
         icons/home.svg
         icons/work.svg
+        icons/cog.svg
         icons/church.svg
         icons/park.svg
         icons/school.svg
         icons/attraction.svg
         icons/beauty.svg
         icons/gym.svg
+        icons/plus.svg
+        icons/devices.svg
+        icons/check.svg
+        icons/sliders.svg
+        icons/speaker.svg
+        icons/mic-fill.svg
+        icons/elise-logo.svg
 )
 
 target_link_libraries(elise PRIVATE
@@ -192,5 +246,11 @@ if (HermesIpc_FOUND)
         PROXY
     )
 endif()
+
+# So qmltyperegistrar's `#include <WavyLine.h>` (and other QML_ELEMENT headers
+# under core/components) resolves.
+target_include_directories(elise PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/components
+)
 
 install(TARGETS elise DESTINATION /usr/bin)

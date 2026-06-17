@@ -95,7 +95,7 @@ QtObject {
     readonly property int toastSlideOffset: 60   // slide-in start y
 
     // ── Settings menu ─────────────────────────────────────────────────────────
-    readonly property int settingsSidebarW:    220   // left navigation width
+    readonly property int settingsSidebarW:    280   // left navigation width
     readonly property int settingsSidebarItem: 52    // sidebar row height
     readonly property int settingsSummaryH:    56    // top summary bar height
     readonly property int settingsRowH:        56    // standard list-row height
