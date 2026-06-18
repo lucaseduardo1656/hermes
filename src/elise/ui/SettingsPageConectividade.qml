@@ -1,21 +1,26 @@
+pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Layouts
 import Elise
 
-// Page: Network — a Wi-Fi toggle header card over the inline list of nearby
-// networks (Caelestia layout). Password input is delegated to the global
-// Keyboard singleton; per-network actions go through the ActionSheet.
-Flickable {
+// Page: Network — Caelestia nexus NetworkPage. Wi-Fi ToggleRow over an ItemList
+// of nearby networks; the indeterminate scan bar lives at the top of the list
+// card and grows in while a scan is in flight. Password entry is delegated to
+// the global Keyboard; per-network actions go through the ActionSheet.
+VerticalFadeFlickable {
     id: root
     clip: true
     contentWidth: width
-    contentHeight: _outer.height
-    boundsBehavior: Flickable.StopAtBounds
+    contentHeight: _col.implicitHeight + topMargin + bottomMargin
+    topMargin: Tokens.padding.large
+    bottomMargin: Tokens.padding.extraLarge
+
+    function _isSecure(n) { return n.security !== "none" }
 
     function _onNetworkTap(n) {
         if (n.ssid === Settings.network.currentSsid) { Settings.network.disconnectCurrent(); return }
         if (n.saved)               { Settings.network.reconnectSaved(n.ssid); return }
-        if (n.security === "none") { Settings.network.connectOpen(n.ssid);    return }
+        if (!_isSecure(n))         { Settings.network.connectOpen(n.ssid);    return }
         const ssid = n.ssid
         Keyboard.show({
             title: "Senha de " + ssid, password: true,
@@ -24,9 +29,8 @@ Flickable {
     }
     function _onNetworkOptions(n) {
         const ssid = n.ssid
-        const isCurrent = ssid === Settings.network.currentSsid
         const items = []
-        if (isCurrent)
+        if (ssid === Settings.network.currentSsid)
             items.push({ label: "Desconectar", onSelected: function() { Settings.network.disconnectCurrent() } })
         else
             items.push({ label: "Conectar", onSelected: function() { root._onNetworkTap(n) } })
@@ -35,174 +39,135 @@ Flickable {
                          onSelected: function() { Settings.network.forgetSsid(ssid) } })
         ActionSheet.show({ title: ssid, items: items })
     }
-    function _strengthOf(ssid) {
-        const list = Settings.network.networks
-        for (let i = 0; i < list.length; ++i)
-            if (list[i].ssid === ssid) return list[i].strength
-        return 0
-    }
 
-    // Auto-scan: refresh on open and on a slow timer (the indeterminate bar in
-    // the gap shows while a scan is in flight).
     Component.onCompleted: if (Settings.network.wifiPowered) Settings.network.scanWifi()
     Timer {
         interval: 12000; repeat: true; running: Settings.network.wifiPowered
+        triggeredOnStart: true
         onTriggered: Settings.network.scanWifi()
     }
 
-        // Two separate cards — a Wi-Fi toggle card and the network list card —
-        // with a real gap between them (the panel shows through) so they don't
-        // look glued. The scan indicator sweeps in that gap.
-        Column {
-            id: _outer
-            width: parent.width
-            spacing: 0
+    ColumnLayout {
+        id: _col
+        anchors { left: parent.left; right: parent.right; top: parent.top
+                  leftMargin: Tokens.padding.large; rightMargin: Tokens.padding.large }
+        spacing: Tokens.spacing.extraSmall / 2
 
-            // ── Wi-Fi toggle card — acts as the FIRST item of the group, so
-            //    only its top corners round (the list continues below the gap).
-            Rectangle {
-                width: parent.width; height: 64
-                topLeftRadius: Theme.radiusL; topRightRadius: Theme.radiusL
-                bottomLeftRadius: 0; bottomRightRadius: 0
-                color: Qt.rgba(1, 1, 1, 0.05)
-                clip: true
-                Rectangle { anchors.fill: parent
-                            color: _wifiRowArea.pressed ? Qt.rgba(1,1,1,0.05) : "transparent" }
-                Text {
-                    anchors { left: parent.left; leftMargin: Theme.spaceL
-                              verticalCenter: parent.verticalCenter }
-                    text: "Wi-Fi"; color: System.textPrimary
-                    font.pixelSize: Theme.fontBody; font.weight: Font.Medium
-                }
-                StyledSwitch {
-                    id: _wifiSwitch
-                    anchors { right: parent.right; rightMargin: Theme.spaceL
-                              verticalCenter: parent.verticalCenter }
-                    checked: Settings.network.wifiPowered
-                    onToggled: Settings.network.setWifiPowered(checked)
-                }
-                MouseArea {
-                    id: _wifiRowArea
-                    anchors { left: parent.left; right: _wifiSwitch.left; top: parent.top; bottom: parent.bottom }
-                    onClicked: Settings.network.setWifiPowered(!Settings.network.wifiPowered)
-                }
-            }
+        ToggleRow {
+            first: true
+            text: "Wi-Fi"
+            checked: Settings.network.wifiPowered
+            onToggled: Settings.network.setWifiPowered(checked)
+        }
 
-            // ── Gap with the scan indicator — Caelestia StyledProgressBar
-            //    (indeterminate M3, native WavyLine/LinearIndicatorManager).
-            Item {
-                id: _gap
-                width: parent.width; height: Theme.spaceXS; clip: true
-                StyledProgressBar {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width
-                    indeterminate: Settings.network.scanning
-                    opacity: Settings.network.scanning ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: Theme.durFast } }
-                }
-            }
+        ItemList {
+            id: networkList
+            last: true
 
-            // ── Network list card — continues the group, so its top is square
-            //    (first network = the "second" item) and only the bottom rounds.
-            Rectangle {
-                width: parent.width; height: _listCol.height
-                topLeftRadius: 0; topRightRadius: 0
-                bottomLeftRadius: Theme.radiusL; bottomRightRadius: Theme.radiusL
-                color: Qt.rgba(1, 1, 1, 0.05)
-                clip: true
+            showList: Settings.network.wifiPowered
+            placeholderIcon: Settings.network.wifiPowered ? "wifi_find" : "signal_wifi_off"
+            placeholderText: Settings.network.wifiPowered ? "Nenhuma rede encontrada" : "Wi-Fi desligado"
+            extraHeight: Settings.network.scanning ? Tokens.rounding.extraSmall : 0
+            list.anchors.top: scanIndicator.bottom
 
-                Column {
-                    id: _listCol
-                    width: parent.width
+            model: Settings.network.wifiPowered ? Settings.network.networks : []
 
-                // Empty state
-                Item {
-                    width: parent.width; height: 128
-                    visible: Settings.network.networks.length === 0
-                    Column {
-                        anchors.centerIn: parent; spacing: Theme.spaceS
-                        SvgIcon {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            source: "qrc:/icons/wifi.svg"; color: System.textMuted; size: Theme.iconXL
+            delegate: StateLayer {
+                id: net
+                required property var modelData
+                required property int index
+
+                readonly property bool current: modelData.ssid === Settings.network.currentSsid
+                readonly property bool connecting: modelData.ssid === Settings.network.connectingSsid
+                readonly property bool saved: modelData.saved === true
+
+                anchors.left: networkList.list.contentItem.left
+                anchors.right: networkList.list.contentItem.right
+                anchors.fill: undefined
+                implicitHeight: netLayout.implicitHeight + netLayout.anchors.margins * 2
+                radius: Tokens.rounding.extraSmall
+                disabled: connecting
+
+                onClicked: if (!connecting) root._onNetworkTap(modelData)
+
+                RowLayout {
+                    id: netLayout
+                    anchors.fill: parent
+                    anchors.margins: Tokens.padding.large
+                    anchors.leftMargin: Tokens.padding.extraLarge
+                    anchors.rightMargin: Tokens.padding.extraLarge
+                    spacing: Tokens.spacing.medium
+
+                    MaterialIcon {
+                        symbol: Icons.getNetworkIcon(net.modelData.strength, root._isSecure(net.modelData))
+                        color: net.current ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                        fontStyle: Tokens.font.icon.medium
+                        opacity: net.connecting ? 0.5 : 1
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+                        opacity: net.connecting ? 0.5 : 1
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: net.modelData.ssid
+                            font: Tokens.font.body.small
+                            elide: Text.ElideRight
                         }
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: Settings.network.scanning ? "Procurando redes…" : "Nenhuma rede encontrada"
-                            color: System.textSecondary; font.pixelSize: Theme.fontBody
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: "Segurança: " + (root._isSecure(net.modelData) ? net.modelData.security.toUpperCase() : "aberta")
+                                  + (net.saved ? "  •  Salva" : "")
+                                  + (net.current ? "  •  Conectado" : "")
+                            color: Colours.palette.m3outline
+                            font: Tokens.font.label.small
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    // Trailing: spinner while connecting; gear (options) for
+                    // saved/current; plain lock otherwise.
+                    Item {
+                        Layout.alignment: Qt.AlignVCenter
+                        implicitWidth: Theme.iconM
+                        implicitHeight: Theme.iconM
+
+                        LoadingIndicator {
+                            anchors.centerIn: parent
+                            visible: net.connecting
+                            implicitSize: Theme.iconM
+                        }
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            visible: !net.connecting
+                            symbol: (net.saved || net.current) ? "settings" : "lock"
+                            color: net.current ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                            fontStyle: Tokens.font.icon.medium
+                        }
+                        StateLayer {
+                            disabled: net.connecting || !(net.saved || net.current)
+                            onClicked: root._onNetworkOptions(net.modelData)
                         }
                     }
                 }
+            }
 
-                Repeater {
-                    model: Settings.network.networks
-                    delegate: Item {
-                        required property var modelData
-                        required property int index
-                        width: _listCol.width
-                        height: 60
-                        readonly property bool _current: modelData.ssid === Settings.network.currentSsid
-                        readonly property bool _saved:   modelData.saved === true
+            // Indeterminate scan bar pinned to the top of the list card; height
+            // animates in/out so the bar never stops looping (it stays
+            // indeterminate the whole time, just collapses to 0px when idle).
+            StyledProgressBar {
+                id: scanIndicator
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 1
+                implicitHeight: Settings.network.scanning ? Tokens.rounding.extraSmall : 0
+                indeterminate: true
 
-                        Rectangle { anchors.fill: parent
-                                    color: _rowArea.pressed ? Qt.rgba(1,1,1,0.05) : "transparent" }
-
-                        SvgIcon {
-                            id: _wifiIcon
-                            anchors { left: parent.left; leftMargin: Theme.spaceL
-                                      verticalCenter: parent.verticalCenter }
-                            source: "qrc:/icons/wifi.svg"
-                            color:  _current ? System.accent : System.textSecondary
-                            size:   Theme.iconS
-                        }
-                        Column {
-                            anchors { left: _wifiIcon.right; leftMargin: Theme.spaceM
-                                      right: _rowAction.left; rightMargin: Theme.spaceS
-                                      verticalCenter: parent.verticalCenter }
-                            spacing: 1
-                            Text {
-                                width: parent.width
-                                text: modelData.ssid
-                                color: _current ? System.accent : System.textPrimary
-                                font.pixelSize: Theme.fontBody
-                                font.weight: _current ? Font.Medium : Font.Normal
-                                elide: Text.ElideRight
-                            }
-                            Text {
-                                width: parent.width
-                                text: "Segurança: " + (modelData.security === "none" ? "aberta"
-                                        : modelData.security.toUpperCase())
-                                      + (_saved ? "  ·  Salva" : "")
-                                      + (_current ? "  ·  Conectado" : "")
-                                color: System.textSecondary; font.pixelSize: 12
-                                elide: Text.ElideRight
-                            }
-                        }
-                        Rectangle {
-                            id: _rowAction
-                            anchors { right: parent.right; rightMargin: Theme.spaceL
-                                      verticalCenter: parent.verticalCenter }
-                            width: Theme.btnMedium; height: Theme.btnMedium; radius: width / 2
-                            color: (_saved || _current) && _gearArea.pressed ? System.surface2 : "transparent"
-                            SvgIcon {
-                                anchors.centerIn: parent
-                                source: (_saved || _current) ? "qrc:/icons/cog.svg" : "qrc:/icons/lock.svg"
-                                color: System.textSecondary; size: Theme.iconS
-                            }
-                            MouseArea { id: _gearArea; anchors.fill: parent
-                                        enabled: _saved || _current
-                                        onClicked: root._onNetworkOptions(modelData) }
-                        }
-                        MouseArea { id: _rowArea
-                            anchors { left: parent.left; right: _rowAction.left; top: parent.top; bottom: parent.bottom }
-                            onClicked: root._onNetworkTap(modelData) }
-
-                        Rectangle { visible: index < Settings.network.networks.length - 1
-                                    anchors { left: _wifiIcon.left; right: parent.right
-                                              rightMargin: Theme.spaceL; bottom: parent.bottom }
-                                    height: 1; color: Qt.rgba(1,1,1,0.06) }
-                    }   // delegate Item
-                }       // Repeater
-                }       // _listCol Column
-            }           // list card Rectangle
-        }               // _outer Column
-    }                   // root Flickable
+                Behavior on implicitHeight { CAnim {} }
+            }
+        }
+    }
+}

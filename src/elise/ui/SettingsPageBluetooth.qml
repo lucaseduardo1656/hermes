@@ -1,17 +1,17 @@
+pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import Elise
 
-// Page: Connected devices — Bluetooth toggle + saved devices, with a "pair new
-// device" sub-view that scans. Same grouped-card layout as the Network page.
+// Page: Connected devices — Caelestia nexus BluetoothPage. Bluetooth ToggleRow
+// over an ItemList of saved devices, a "Pair new device" row that opens the
+// scanning sub-view, and a Discoverable toggle. The SettingsMenu host renders
+// the shared header; this page drives title/back via navTitle/canGoBack/goBack.
 Item {
     id: root
     clip: true
 
     property string view: "main"      // "main" | "pair"
-
-    // Header surfaced by SettingsMenu: in the pair sub-view the right-pane title
-    // becomes "Parear novo dispositivo" + a back arrow, instead of the section
-    // label "Connected devices".
     property string navTitle:  view === "pair" ? "Parear novo dispositivo" : ""
     property bool   canGoBack: view === "pair"
     function goBack() { Settings.bluetooth.stopScan(); view = "main" }
@@ -52,245 +52,275 @@ Item {
     // ── Main view ───────────────────────────────────────────────────────────
     Component {
         id: _mainView
-        Flickable {
-            anchors.fill: parent
-            contentHeight: _outer.height
+        VerticalFadeFlickable {
             clip: true
-            boundsBehavior: Flickable.StopAtBounds
+            contentWidth: width
+            contentHeight: _mainCol.implicitHeight + topMargin + bottomMargin
+            topMargin: Tokens.padding.large
+            bottomMargin: Tokens.padding.extraLarge
 
-            Column {
-                id: _outer
-                width: parent.width
-                spacing: Theme.spaceL
+            ColumnLayout {
+                id: _mainCol
+                anchors { left: parent.left; right: parent.right; top: parent.top
+                          leftMargin: Tokens.padding.large; rightMargin: Tokens.padding.large }
+                spacing: Tokens.spacing.extraSmall / 2
 
-                // Bluetooth toggle card (first item of the group → top rounded)
-                Column {
-                    width: parent.width
-                    spacing: Theme.spaceXS
+                ToggleRow {
+                    first: true
+                    text: "Bluetooth"
+                    checked: Settings.bluetooth.powered
+                    onToggled: Settings.bluetooth.setPowered(checked)
+                }
 
-                    Rectangle {
-                        width: parent.width; height: 64
-                        topLeftRadius: Theme.radiusL; topRightRadius: Theme.radiusL
-                        bottomLeftRadius: 0; bottomRightRadius: 0
-                        color: Qt.rgba(1,1,1,0.05); clip: true
-                        Rectangle { anchors.fill: parent
-                                    color: _btRowArea.pressed ? Qt.rgba(1,1,1,0.05) : "transparent" }
-                        Text { anchors { left: parent.left; leftMargin: Theme.spaceL
-                                         verticalCenter: parent.verticalCenter }
-                               text: "Bluetooth"; color: System.textPrimary
-                               font.pixelSize: Theme.fontBody; font.weight: Font.Medium }
-                        StyledSwitch {
-                            id: _btSwitch
-                            anchors { right: parent.right; rightMargin: Theme.spaceL
-                                      verticalCenter: parent.verticalCenter }
-                            checked: Settings.bluetooth.powered
-                            onToggled: Settings.bluetooth.setPowered(checked)
-                        }
-                        MouseArea { id: _btRowArea
-                            anchors { left: parent.left; right: _btSwitch.left; top: parent.top; bottom: parent.bottom }
-                            onClicked: Settings.bluetooth.setPowered(!Settings.bluetooth.powered) }
-                    }
+                ItemList {
+                    id: savedList
+                    showList: Settings.bluetooth.powered
+                    placeholderIcon: Settings.bluetooth.powered ? "devices_other" : "bluetooth_disabled"
+                    placeholderText: Settings.bluetooth.powered ? "Nenhum dispositivo salvo" : "Bluetooth desativado"
+                    model: Settings.bluetooth.powered ? root._saved() : []
 
-                    // Devices card (continues the group → bottom rounded)
-                    Rectangle {
-                        width: parent.width; height: _devCol.height
-                        topLeftRadius: 0; topRightRadius: 0
-                        bottomLeftRadius: Theme.radiusL; bottomRightRadius: Theme.radiusL
-                        color: Qt.rgba(1,1,1,0.05); clip: true
+                    delegate: StateLayer {
+                        id: dev
+                        required property var modelData
+                        required property int index
 
-                        Column {
-                            id: _devCol
-                            width: parent.width
+                        readonly property bool connected: modelData.connected === true
+                        readonly property bool loading: modelData.address === Settings.bluetooth.connectingAddr
 
-                            // Empty state
-                            Item {
-                                width: parent.width; height: 132
-                                visible: root._saved().length === 0
-                                Column {
-                                    anchors.centerIn: parent; spacing: Theme.spaceS
-                                    SvgIcon { anchors.horizontalCenter: parent.horizontalCenter
-                                              source: "qrc:/icons/bluetooth.svg"
-                                              color: System.textMuted; size: Theme.iconXL }
-                                    Text { anchors.horizontalCenter: parent.horizontalCenter
-                                           text: Settings.bluetooth.powered ? "Nenhum dispositivo salvo"
-                                                                            : "Bluetooth desativado"
-                                           color: System.textSecondary; font.pixelSize: Theme.fontBody }
+                        anchors.left: savedList.list.contentItem.left
+                        anchors.right: savedList.list.contentItem.right
+                        anchors.fill: undefined
+                        implicitHeight: devLayout.implicitHeight + devLayout.anchors.margins * 2
+                        radius: Tokens.rounding.extraSmall
+                        disabled: loading
+                        onClicked: if (!loading) root._onDeviceTap(modelData)
+
+                        RowLayout {
+                            id: devLayout
+                            anchors.fill: parent
+                            anchors.margins: Tokens.padding.medium
+                            anchors.leftMargin: Tokens.padding.largeIncreased
+                            anchors.rightMargin: Tokens.padding.largeIncreased
+                            spacing: Tokens.spacing.medium
+
+                            StyledRect {
+                                Layout.alignment: Qt.AlignVCenter
+                                implicitWidth: implicitHeight
+                                implicitHeight: devIcon.implicitHeight + Tokens.padding.small * 2
+                                radius: Tokens.rounding.full
+                                color: dev.connected ? Colours.palette.m3primary : Colours.palette.m3secondaryContainer
+                                MaterialIcon {
+                                    id: devIcon
+                                    anchors.centerIn: parent
+                                    symbol: Icons.getBluetoothIcon(dev.modelData.icon ?? "")
+                                    color: dev.connected ? Colours.palette.m3onPrimary : Colours.palette.m3onSecondaryContainer
+                                    fontStyle: Tokens.font.icon.medium
+                                    fill: dev.connected ? 1 : 0
                                 }
                             }
 
-                            Repeater {
-                                model: root._saved()
-                                delegate: Item {
-                                    required property var modelData
-                                    required property int index
-                                    width: _devCol.width; height: 60
-                                    Rectangle { anchors.fill: parent
-                                                color: _dArea.pressed ? Qt.rgba(1,1,1,0.05) : "transparent" }
-                                    SvgIcon { id: _dIcon
-                                        anchors { left: parent.left; leftMargin: Theme.spaceL
-                                                  verticalCenter: parent.verticalCenter }
-                                        source: "qrc:/icons/bluetooth.svg"
-                                        color: modelData.connected ? System.accent : System.textSecondary
-                                        size: Theme.iconS }
-                                    Column {
-                                        anchors { left: _dIcon.right; leftMargin: Theme.spaceM
-                                                  right: _dGear.left; rightMargin: Theme.spaceS
-                                                  verticalCenter: parent.verticalCenter }
-                                        spacing: 1
-                                        Text { width: parent.width; text: modelData.alias
-                                               color: modelData.connected ? System.accent : System.textPrimary
-                                               font.pixelSize: Theme.fontBody
-                                               font.weight: modelData.connected ? Font.Medium : Font.Normal
-                                               elide: Text.ElideRight }
-                                        Text { width: parent.width
-                                               text: modelData.connected ? "Conectado" : "Salvo"
-                                               color: System.textSecondary; font.pixelSize: 12 }
-                                    }
-                                    Rectangle { id: _dGear
-                                        anchors { right: parent.right; rightMargin: Theme.spaceL
-                                                  verticalCenter: parent.verticalCenter }
-                                        width: Theme.btnMedium; height: Theme.btnMedium; radius: width/2
-                                        color: _gArea.pressed ? System.surface2 : "transparent"
-                                        SvgIcon { anchors.centerIn: parent; source: "qrc:/icons/cog.svg"
-                                                  color: System.textSecondary; size: Theme.iconS }
-                                        MouseArea { id: _gArea; anchors.fill: parent
-                                                    onClicked: root._onDeviceOptions(modelData) } }
-                                    MouseArea { id: _dArea
-                                        anchors { left: parent.left; right: _dGear.left; top: parent.top; bottom: parent.bottom }
-                                        onClicked: root._onDeviceTap(modelData) }
-                                    Rectangle { visible: index < root._saved().length - 1
-                                                anchors { left: _dIcon.left; right: parent.right
-                                                          rightMargin: Theme.spaceL; bottom: parent.bottom }
-                                                height: 1; color: Qt.rgba(1,1,1,0.06) }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: dev.modelData.alias || dev.modelData.address
+                                    font: Tokens.font.body.small
+                                    elide: Text.ElideRight
+                                }
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: dev.loading ? "Conectando…" : dev.connected ? "Conectado" : "Salvo"
+                                    color: Colours.palette.m3outline
+                                    font: Tokens.font.label.small
+                                    elide: Text.ElideRight
+                                    animate: true
                                 }
                             }
 
-                            // Pair new device row
                             Item {
-                                width: parent.width; height: 56
-                                Rectangle { anchors.fill: parent
-                                            color: _pairArea.pressed ? Qt.rgba(1,1,1,0.05) : "transparent" }
-                                Row { anchors { left: parent.left; leftMargin: Theme.spaceL
-                                                verticalCenter: parent.verticalCenter }
-                                      spacing: Theme.spaceM
-                                    SvgIcon { anchors.verticalCenter: parent.verticalCenter
-                                              source: "qrc:/icons/plus.svg"; color: System.accent; size: Theme.iconS }
-                                    Text { anchors.verticalCenter: parent.verticalCenter
-                                           text: "Parear novo dispositivo"; color: System.accent
-                                           font.pixelSize: Theme.fontBody } }
-                                MouseArea { id: _pairArea; anchors.fill: parent
-                                            enabled: Settings.bluetooth.powered
-                                            onClicked: { Settings.bluetooth.startScan(); root.view = "pair" } }
+                                Layout.alignment: Qt.AlignVCenter
+                                implicitWidth: Theme.iconM
+                                implicitHeight: Theme.iconM
+                                LoadingIndicator {
+                                    anchors.centerIn: parent
+                                    visible: dev.loading
+                                    implicitSize: Theme.iconM
+                                }
+                                MaterialIcon {
+                                    anchors.centerIn: parent
+                                    visible: !dev.loading
+                                    symbol: "settings"
+                                    color: dev.connected ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                                    fontStyle: Tokens.font.icon.medium
+                                }
+                                StateLayer {
+                                    disabled: dev.loading
+                                    onClicked: root._onDeviceOptions(dev.modelData)
+                                }
                             }
                         }
                     }
                 }
 
-                // Discoverable toggle card
-                Rectangle {
-                    width: parent.width; height: 64
-                    radius: Theme.radiusL
-                    color: Qt.rgba(1,1,1,0.05); clip: true
-                    Rectangle { anchors.fill: parent
-                                color: _discRow.pressed ? Qt.rgba(1,1,1,0.05) : "transparent" }
-                    Column {
-                        anchors { left: parent.left; leftMargin: Theme.spaceL; verticalCenter: parent.verticalCenter
-                                  right: _discSwitch.left; rightMargin: Theme.spaceM }
-                        spacing: 1
-                        Text { text: "Visível para outros"; color: System.textPrimary
-                               font.pixelSize: Theme.fontBody; font.weight: Font.Medium }
-                        Text { text: "Permite que dispositivos próximos encontrem este"
-                               color: System.textSecondary; font.pixelSize: 12; elide: Text.ElideRight
-                               width: parent.width }
+                // Pair new device
+                ConnectedRect {
+                    Layout.fillWidth: true
+                    last: true
+                    implicitHeight: pairLayout.implicitHeight + pairLayout.anchors.margins * 2
+
+                    StateLayer {
+                        disabled: !Settings.bluetooth.powered
+                        onClicked: { Settings.bluetooth.startScan(); root.view = "pair" }
                     }
-                    StyledSwitch {
-                        id: _discSwitch
-                        anchors { right: parent.right; rightMargin: Theme.spaceL; verticalCenter: parent.verticalCenter }
-                        checked: Settings.bluetooth.discoverable
-                        onToggled: Settings.bluetooth.setDiscoverable(checked)
+
+                    RowLayout {
+                        id: pairLayout
+                        anchors.fill: parent
+                        anchors.margins: Tokens.padding.medium
+                        anchors.leftMargin: Tokens.padding.largeIncreased
+                        anchors.rightMargin: Tokens.padding.largeIncreased
+                        spacing: Tokens.spacing.medium
+                        opacity: Settings.bluetooth.powered ? 1 : 0.5
+                        Behavior on opacity { CAnim {} }
+
+                        MaterialIcon {
+                            symbol: "add"
+                            fontStyle: Tokens.font.icon.medium
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: "Parear novo dispositivo"
+                            font: Tokens.font.body.small
+                            elide: Text.ElideRight
+                        }
                     }
-                    MouseArea { id: _discRow
-                        anchors { left: parent.left; right: _discSwitch.left; top: parent.top; bottom: parent.bottom }
-                        onClicked: Settings.bluetooth.setDiscoverable(!Settings.bluetooth.discoverable) }
+                }
+
+                // Discoverable
+                ToggleRow {
+                    Layout.topMargin: Tokens.spacing.large - parent.spacing
+                    first: true; last: true
+                    text: "Visível para outros"
+                    subtext: "Permite que dispositivos próximos encontrem este"
+                    enabled: Settings.bluetooth.powered
+                    opacity: Settings.bluetooth.powered ? 1 : 0.5
+                    checked: Settings.bluetooth.discoverable
+                    onToggled: Settings.bluetooth.setDiscoverable(checked)
+                    Behavior on opacity { CAnim {} }
                 }
             }
         }
     }
 
-    // ── Pair view (scan) ────────────────────────────────────────────────────
+    // ── Pair view (scan sub-page) ───────────────────────────────────────────
     Component {
         id: _pairView
-        Flickable {
-            anchors.fill: parent
-            contentHeight: _pairCard.height
+        VerticalFadeFlickable {
             clip: true
-            boundsBehavior: Flickable.StopAtBounds
+            contentWidth: width
+            contentHeight: _pairCol.implicitHeight + topMargin + bottomMargin
+            topMargin: Tokens.padding.large
+            bottomMargin: Tokens.padding.extraLarge
 
-            Rectangle {
-                id: _pairCard
-                width: parent.width; height: _pairCol.height
-                radius: Theme.radiusL
-                color: Qt.rgba(1,1,1,0.05); clip: true
+            ColumnLayout {
+                id: _pairCol
+                anchors { left: parent.left; right: parent.right; top: parent.top
+                          leftMargin: Tokens.padding.large; rightMargin: Tokens.padding.large }
+                spacing: Tokens.spacing.extraSmall / 2
 
-                Column {
-                    id: _pairCol
-                    width: parent.width
-
-                    // header + scan bar
-                    Item {
-                        width: parent.width; height: 44
-                        Text { anchors { left: parent.left; leftMargin: Theme.spaceL
-                                         verticalCenter: parent.verticalCenter }
-                               text: "Dispositivos disponíveis"; color: System.textSecondary
-                               font.pixelSize: Theme.fontLabel; font.weight: Font.Medium }
+                // Header card
+                ConnectedRect {
+                    Layout.fillWidth: true
+                    first: true
+                    implicitHeight: pairHeader.implicitHeight + Tokens.padding.medium * 2
+                    StyledText {
+                        id: pairHeader
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: Tokens.padding.large
+                        text: "Dispositivos disponíveis"
+                        color: Colours.palette.m3onSurfaceVariant
+                        font: Tokens.font.body.small
                     }
-                    Item {
-                        id: _scanGap
-                        width: parent.width; height: 3; clip: true
-                        Rectangle { id: _seg
-                            width: parent.width * 0.35; height: 2; radius: 1
-                            anchors.verticalCenter: parent.verticalCenter; color: System.accent
-                            visible: Settings.bluetooth.discovering
-                            SequentialAnimation on x { running: Settings.bluetooth.discovering; loops: Animation.Infinite
-                                NumberAnimation { from: -_seg.width; to: _scanGap.width; duration: 1000; easing.type: Easing.InOutQuad } }
-                        }
-                    }
+                }
 
-                    Item {
-                        width: parent.width; height: 100
-                        visible: root._available().length === 0
-                        Text { anchors.centerIn: parent
-                               text: Settings.bluetooth.discovering ? "Procurando…" : "Nenhum dispositivo encontrado"
-                               color: System.textSecondary; font.pixelSize: Theme.fontBody }
-                    }
+                ItemList {
+                    id: availList
+                    last: true
+                    showList: true
+                    extraHeight: scanIndicator.implicitHeight
+                    placeholderIcon: "bluetooth_searching"
+                    placeholderText: Settings.bluetooth.discovering ? "Procurando dispositivos…" : "Nenhum dispositivo encontrado"
+                    list.anchors.top: scanIndicator.bottom
+                    model: root._available()
 
-                    Repeater {
-                        model: root._available()
-                        delegate: Item {
-                            required property var modelData
-                            required property int index
-                            width: _pairCol.width; height: 60
-                            Rectangle { anchors.fill: parent
-                                        color: _aArea.pressed ? Qt.rgba(1,1,1,0.05) : "transparent" }
-                            SvgIcon { id: _aIcon
-                                anchors { left: parent.left; leftMargin: Theme.spaceL; verticalCenter: parent.verticalCenter }
-                                source: "qrc:/icons/bluetooth.svg"; color: System.textSecondary; size: Theme.iconS }
-                            Column {
-                                anchors { left: _aIcon.right; leftMargin: Theme.spaceM
-                                          right: parent.right; rightMargin: Theme.spaceL; verticalCenter: parent.verticalCenter }
-                                spacing: 1
-                                Text { width: parent.width; text: modelData.alias || modelData.address
-                                       color: System.textPrimary; font.pixelSize: Theme.fontBody; elide: Text.ElideRight }
-                                Text { width: parent.width; text: modelData.address
-                                       color: System.textSecondary; font.pixelSize: 12; elide: Text.ElideRight }
+                    delegate: StateLayer {
+                        id: nd
+                        required property var modelData
+                        required property int index
+
+                        readonly property bool pairing: modelData.address === Settings.bluetooth.connectingAddr
+
+                        anchors.left: availList.list.contentItem.left
+                        anchors.right: availList.list.contentItem.right
+                        anchors.fill: undefined
+                        implicitHeight: ndLayout.implicitHeight + ndLayout.anchors.margins * 2
+                        radius: Tokens.rounding.extraSmall
+                        bottomLeftRadius: index === availList.list.count - 1 ? Tokens.rounding.extraLarge : radius
+                        bottomRightRadius: index === availList.list.count - 1 ? Tokens.rounding.extraLarge : radius
+                        disabled: pairing
+                        onClicked: if (!pairing) Settings.bluetooth.pair(modelData.address)
+
+                        RowLayout {
+                            id: ndLayout
+                            anchors.fill: parent
+                            anchors.margins: Tokens.padding.medium
+                            anchors.leftMargin: Tokens.padding.largeIncreased
+                            anchors.rightMargin: Tokens.padding.largeIncreased
+                            spacing: Tokens.spacing.medium
+
+                            MaterialIcon {
+                                symbol: Icons.getBluetoothIcon(nd.modelData.icon ?? "")
+                                color: Colours.palette.m3onSurfaceVariant
+                                fontStyle: Tokens.font.icon.medium
+                                opacity: nd.pairing ? 0.5 : 1
                             }
-                            MouseArea { id: _aArea; anchors.fill: parent
-                                        onClicked: Settings.bluetooth.pair(modelData.address) }
-                            Rectangle { visible: index < root._available().length - 1
-                                        anchors { left: _aIcon.left; right: parent.right
-                                                  rightMargin: Theme.spaceL; bottom: parent.bottom }
-                                        height: 1; color: Qt.rgba(1,1,1,0.06) }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                                opacity: nd.pairing ? 0.5 : 1
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: nd.modelData.alias || nd.modelData.address || "Dispositivo desconhecido"
+                                    font: Tokens.font.body.small
+                                    elide: Text.ElideRight
+                                }
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: nd.pairing ? "Pareando…" : (nd.modelData.address ?? "")
+                                    color: Colours.palette.m3outline
+                                    font: Tokens.font.label.small
+                                    elide: Text.ElideRight
+                                    animate: true
+                                }
+                            }
+                            LoadingIndicator {
+                                Layout.alignment: Qt.AlignVCenter
+                                visible: nd.pairing
+                                implicitSize: Theme.iconM
+                            }
                         }
+                    }
+
+                    StyledProgressBar {
+                        id: scanIndicator
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 1
+                        implicitHeight: Tokens.rounding.extraSmall
+                        indeterminate: true
                     }
                 }
             }

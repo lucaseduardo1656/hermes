@@ -1,81 +1,91 @@
+pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import Elise
 
-// Page: Interface — tema, cor de destaque, animações, mapa.
-Flickable {
+// Page: Interface — tema, cor de destaque, animações, mapa. Wired to System
+// (theme/accent) and Settings.appearance (map style/animations). Pickers reuse
+// the global ActionSheet; nexus-styled rows.
+VerticalFadeFlickable {
     id: root
-    contentWidth:  width
-    contentHeight: _col.implicitHeight + Theme.spaceXL * 2
     clip: true
+    contentWidth: width
+    contentHeight: _col.implicitHeight + topMargin + bottomMargin
+    topMargin: Tokens.padding.large
+    bottomMargin: Tokens.padding.extraLarge
 
-    Column {
+    function _accentLabel() {
+        const cur = System.accentKey
+        const opts = System.accentOptions
+        for (let i = 0; i < opts.length; ++i)
+            if (opts[i].key === cur) return opts[i].label
+        return cur
+    }
+    function _mapStyleLabel() {
+        const cur = Settings.appearance.mapStyle
+        const opts = Settings.appearance.mapStyleOptions
+        for (let i = 0; i < opts.length; ++i)
+            if (opts[i].key === cur) return opts[i].label
+        return cur
+    }
+
+    ColumnLayout {
         id: _col
-        anchors {
-            top: parent.top; topMargin: Theme.spaceXL
-            left: parent.left; leftMargin: Theme.spaceXL
-            right: parent.right; rightMargin: Theme.spaceXL
+        anchors { left: parent.left; right: parent.right; top: parent.top
+                  leftMargin: Tokens.padding.large; rightMargin: Tokens.padding.large }
+        spacing: Tokens.spacing.extraSmall / 2
+
+        // ── Aparência ───────────────────────────────────────────────────────
+        SectionHeader { first: true; text: "Aparência" }
+        ToggleRow {
+            first: true
+            text: "Tema escuro"
+            checked: System.darkTheme
+            onToggled: System.darkTheme = checked
         }
-        spacing: Theme.spaceXL
-
-        SettingsCard {
-            title: "Aparência"
-
-            SettingsToggle {
-                label: "Tema escuro"
-                checked: System.darkTheme
-                onToggled: (v) => System.darkTheme = v
-            }
-            SettingsAction {
-                label: "Cor de destaque"
-                sublabel: {
-                    const cur = System.accentKey
-                    const opts = System.accentOptions
-                    for (let i = 0; i < opts.length; ++i)
-                        if (opts[i].key === cur) return opts[i].label
-                    return cur
-                }
-                onTriggered: ActionSheet.show({
-                    title: "Cor de destaque",
-                    items: System.accentOptions.map(o => ({
-                        label: o.label,
-                        onSelected: function() { System.accentKey = o.key }
-                    }))
-                })
-            }
-            SettingsAction { label: "Tamanho da fonte";   sublabel: "Padrão" }
-            SettingsAction { label: "Densidade do layout"; sublabel: "Confortável" }
+        NavRow {
+            label: "Cor de destaque"
+            status: root._accentLabel()
+            onClicked: ActionSheet.show({
+                title: "Cor de destaque",
+                items: System.accentOptions.map(o => ({
+                    label: o.label,
+                    onSelected: function() { System.accentKey = o.key }
+                }))
+            })
+        }
+        NavRow {
+            label: "Tamanho da fonte"
+            status: "Padrão"
+        }
+        NavRow {
+            last: true
+            label: "Densidade do layout"
+            status: "Confortável"
         }
 
-        SettingsCard {
-            title: "Mapa"
-
-            SettingsAction {
-                label: "Estilo do mapa"
-                sublabel: {
-                    const cur = Settings.appearance.mapStyle
-                    const opts = Settings.appearance.mapStyleOptions
-                    for (let i = 0; i < opts.length; ++i)
-                        if (opts[i].key === cur) return opts[i].label
-                    return cur
-                }
-                onTriggered: ActionSheet.show({
-                    title: "Estilo do mapa",
-                    items: Settings.appearance.mapStyleOptions.map(o => ({
-                        label: o.label,
-                        onSelected: function() { Settings.appearance.setMapStyle(o.key) }
-                    }))
-                })
-            }
+        // ── Mapa ────────────────────────────────────────────────────────────
+        SectionHeader { text: "Mapa" }
+        NavRow {
+            first: true; last: true
+            label: "Estilo do mapa"
+            status: root._mapStyleLabel()
+            onClicked: ActionSheet.show({
+                title: "Estilo do mapa",
+                items: Settings.appearance.mapStyleOptions.map(o => ({
+                    label: o.label,
+                    onSelected: function() { Settings.appearance.setMapStyle(o.key) }
+                }))
+            })
         }
 
-        SettingsCard {
-            title: "Movimento"
-
-            SettingsToggle {
-                label: "Animações"
-                checked: Settings.appearance.animationsEnabled
-                onToggled: (v) => Settings.appearance.setAnimationsEnabled(v)
-            }
+        // ── Movimento ───────────────────────────────────────────────────────
+        SectionHeader { text: "Movimento" }
+        ToggleRow {
+            first: true; last: true
+            text: "Animações"
+            checked: Settings.appearance.animationsEnabled
+            onToggled: Settings.appearance.setAnimationsEnabled(checked)
         }
     }
 }

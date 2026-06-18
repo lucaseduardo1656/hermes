@@ -48,6 +48,22 @@ AudioController::AudioController(QObject *parent)
 
     applyAlsaVolume(m_volume);
     applyMute(m_muted);
+
+    // Throttle the wpctl call to ~30 Hz during a drag; only the latest value
+    // matters, so coalescing is lossless for the user.
+    m_volumeApply.setSingleShot(true);
+    m_volumeApply.setInterval(33);
+    QObject::connect(&m_volumeApply, &QTimer::timeout, this,
+                     [this]{ applyAlsaVolume(m_volume); });
+
+    // Flush to disk only once the user has settled (avoids per-step SD writes).
+    m_persist.setSingleShot(true);
+    m_persist.setInterval(600);
+    QObject::connect(&m_persist, &QTimer::timeout, this, [this]{
+        m_settings.setValue(QStringLiteral("volume"), m_volume);
+        m_settings.setValue(QStringLiteral("muted"),  m_muted);
+        m_settings.sync();
+    });
 }
 
 QVariantList AudioController::eqOptions() const {
@@ -72,19 +88,17 @@ void AudioController::setVolume(int v) {
     v = qBound(0, v, 100);
     if (v == m_volume) return;
     m_volume = v;
-    m_settings.setValue(QStringLiteral("volume"), v);
-    m_settings.sync();
-    applyAlsaVolume(v);
-    emit volumeChanged();
+    emit volumeChanged();          // UI updates immediately, no I/O on this path
+    m_volumeApply.start();         // coalesced wpctl
+    m_persist.start();             // debounced disk write
 }
 
 void AudioController::setMuted(bool on) {
     if (on == m_muted) return;
     m_muted = on;
-    m_settings.setValue(QStringLiteral("muted"), on);
-    m_settings.sync();
-    applyMute(on);
     emit mutedChanged();
+    applyMute(on);                 // single call — fine to fire now
+    m_persist.start();
 }
 
 void AudioController::applyMute(bool on) {

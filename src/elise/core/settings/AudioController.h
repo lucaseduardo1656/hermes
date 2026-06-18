@@ -3,6 +3,7 @@
 #include <QString>
 #include <QSettings>
 #include <QVariantList>
+#include <QTimer>
 
 // Controls system-wide audio: ALSA master volume, EQ preset,
 // resume-on-start flag, and spatial audio toggle.
@@ -58,4 +59,11 @@ private:
     QString m_eqPreset;
     bool    m_resumeOnStart = true;
     bool    m_spatialAudio  = false;
+
+    // Slider drags fire setVolume() per pixel. Spawning wpctl and sync()'ing
+    // QSettings (an SD-card flush) on every step locks the UI. Both are
+    // coalesced: m_volumeApply throttles the wpctl call to the latest value,
+    // m_persist debounces the disk write until the user stops moving.
+    QTimer  m_volumeApply;
+    QTimer  m_persist;
 };

@@ -21,7 +21,8 @@ Text {
         return cp !== undefined ? String.fromCharCode(cp) : symbol;
     }
 
-    renderType: Text.NativeRendering
+    // NativeRendering blanks Material Symbols glyphs on this Qt/GPU build; the
+    // default (QtRendering) renders them, matching upstream's plain StyledText.
     textFormat: Text.PlainText
     color: Colours.palette.m3onSurface
 

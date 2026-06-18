@@ -1,36 +1,59 @@
+pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import Elise
 
 // Page: Contas — Conta Elise + serviços externos vinculados ao perfil.
-Flickable {
+// Placeholder content (no auth backend yet), nexus-styled.
+VerticalFadeFlickable {
     id: root
-    contentWidth:  width
-    contentHeight: _col.implicitHeight + Theme.spaceXL * 2
     clip: true
+    contentWidth: width
+    contentHeight: _col.implicitHeight + topMargin + bottomMargin
+    topMargin: Tokens.padding.large
+    bottomMargin: Tokens.padding.extraLarge
 
-    Column {
+    property bool _sync: false
+
+    ColumnLayout {
         id: _col
-        anchors {
-            top: parent.top; topMargin: Theme.spaceXL
-            left: parent.left; leftMargin: Theme.spaceXL
-            right: parent.right; rightMargin: Theme.spaceXL
+        anchors { left: parent.left; right: parent.right; top: parent.top
+                  leftMargin: Tokens.padding.large; rightMargin: Tokens.padding.large }
+        spacing: Tokens.spacing.extraSmall / 2
+
+        // ── Conta Elise ─────────────────────────────────────────────────────
+        SectionHeader { first: true; text: "Conta Elise" }
+        NavRow {
+            first: true
+            label: "Status de login"
+            status: "Não autenticado"
         }
-        spacing: Theme.spaceXL
-
-        SettingsCard {
-            title: "Conta Elise"
-
-            SettingsAction { label: "Status de login"; sublabel: "Não autenticado" }
-            SettingsToggle { label: "Sincronização";   checked: false }
-            SettingsAction { label: "Segurança";       sublabel: "Senha, autenticação em duas etapas" }
+        ToggleRow {
+            text: "Sincronização"
+            checked: root._sync
+            onToggled: root._sync = checked
+        }
+        NavRow {
+            last: true
+            label: "Segurança"
+            status: "Senha, autenticação em duas etapas"
         }
 
-        SettingsCard {
-            title: "Contas conectadas"
-
-            SettingsAction { label: "Spotify";       sublabel: "Desconectado" }
-            SettingsAction { label: "YouTube Music"; sublabel: "Desconectado" }
-            SettingsAction { label: "Google";        sublabel: "Desconectado" }
+        // ── Contas conectadas ───────────────────────────────────────────────
+        SectionHeader { text: "Contas conectadas" }
+        NavRow {
+            first: true
+            label: "Spotify"
+            status: "Desconectado"
+        }
+        NavRow {
+            label: "YouTube Music"
+            status: "Desconectado"
+        }
+        NavRow {
+            last: true
+            label: "Google"
+            status: "Desconectado"
         }
     }
 }

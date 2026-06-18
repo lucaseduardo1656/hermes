@@ -73,8 +73,14 @@ set_source_files_properties(ui/CUtils.qml PROPERTIES
 set_source_files_properties(ui/MaterialSymbols.qml PROPERTIES
     QT_QML_SINGLETON_TYPE TRUE
 )
+set_source_files_properties(ui/Icons.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE TRUE
+)
 set_source_files_properties(ui/MaterialSymbolsCodepoints.qml PROPERTIES
     QT_QML_SINGLETON_TYPE TRUE
+    # 4k-line codepoint map. Compiling it to C++ via qmlcache balloons to a
+    # ~2.6 MB TU that OOM-kills the cross compiler; ship it interpreted instead.
+    QT_QML_SKIP_CACHEGEN TRUE
 )
 
 qt_add_qml_module(elise
@@ -104,9 +110,7 @@ qt_add_qml_module(elise
         ui/SettingsPageContas.qml
         ui/SettingsPageVeiculo.qml
         ui/SettingsPageConectividade.qml
-        ui/SettingsPageWifiList.qml
         ui/SettingsPageBluetooth.qml
-        ui/SettingsPageBluetoothList.qml
         ui/SoftKeyboard.qml
         ui/Keyboard.qml
         ui/ActionSheet.qml
@@ -161,6 +165,10 @@ qt_add_qml_module(elise
         ui/VerticalFadeFlickable.qml
         ui/Mask.qml
         ui/SliderRow.qml
+        ui/NavRow.qml
+        ui/ItemList.qml
+        ui/Icons.qml
+        ui/LoadingIndicator.qml
 )
 
 qt_add_resources(elise "elise_icons"
