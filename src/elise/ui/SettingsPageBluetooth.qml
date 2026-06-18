@@ -68,6 +68,7 @@ Item {
                 ToggleRow {
                     first: true
                     text: "Bluetooth"
+                    labelFont: Tokens.font.body.medium
                     checked: Settings.bluetooth.powered
                     onToggled: Settings.bluetooth.setPowered(checked)
                 }

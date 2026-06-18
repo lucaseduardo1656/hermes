@@ -11,6 +11,7 @@
 #include "core/settings/AudioController.h"
 #include "core/GpsController.h"
 #include "core/RoadInfoController.h"
+#include "core/WeatherController.h"
 
 int main(int argc, char *argv[])
 {
@@ -30,6 +31,8 @@ int main(int argc, char *argv[])
     GpsController        gps;
     RoadInfoController   roadInfo;
     roadInfo.attachGps(&gps);
+    WeatherController    weather;
+    weather.bindGps(&gps);
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("System",   &system);
@@ -38,6 +41,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("Settings", &settings);
     engine.rootContext()->setContextProperty("GPS",      &gps);
     engine.rootContext()->setContextProperty("RoadInfo", &roadInfo);
+    engine.rootContext()->setContextProperty("Weather",  &weather);
 
     // Live EQ: when user changes preset, apply the af filter to mpv immediately.
     QObject::connect(settings.audio(), &AudioController::eqPresetChanged,

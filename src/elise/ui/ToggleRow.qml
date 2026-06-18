@@ -14,6 +14,7 @@ ConnectedRect {
     property string text
     property string subtext
     property bool checked
+    property font labelFont: Tokens.font.body.small
     signal toggled(bool checked)
 
     Layout.fillWidth: true
@@ -43,7 +44,7 @@ ConnectedRect {
             StyledText {
                 Layout.fillWidth: true
                 text: root.text
-                font: Tokens.font.body.small
+                font: root.labelFont
                 elide: Text.ElideRight
             }
             StyledText {

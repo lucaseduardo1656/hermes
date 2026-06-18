@@ -204,6 +204,18 @@ Window {
         }
     }
 
+    // ── Weather card (top-right) ──────────────────────────────────────────────
+    // Regional conditions from the Weather controller. Mirrors the top-left
+    // stack; hidden while the player is expanded so it never overlaps.
+    WeatherCard {
+        anchors {
+            top:   parent.top;   topMargin:   Theme.spaceL
+            right: parent.right; rightMargin: Theme.spaceL
+        }
+        z: 700
+        visible: Weather.valid && root.playerState !== "expanded" && !root._poiPanelOpen
+    }
+
     // ── Right-edge FAB stack ──────────────────────────────────────────────────
     // One column owns every floating button (music · places · recenter ·
     // settings) so visibility and stacking live in a single place instead of

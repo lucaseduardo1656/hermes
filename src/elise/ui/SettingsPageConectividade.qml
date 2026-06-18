@@ -8,7 +8,7 @@ import Elise
 // card and grows in while a scan is in flight. Password entry is delegated to
 // the global Keyboard; per-network actions go through the ActionSheet.
 VerticalFadeFlickable {
-    id: root
+    id: page
     clip: true
     contentWidth: width
     contentHeight: _col.implicitHeight + topMargin + bottomMargin
@@ -33,16 +33,18 @@ VerticalFadeFlickable {
         if (ssid === Settings.network.currentSsid)
             items.push({ label: "Desconectar", onSelected: function() { Settings.network.disconnectCurrent() } })
         else
-            items.push({ label: "Conectar", onSelected: function() { root._onNetworkTap(n) } })
+            items.push({ label: "Conectar", onSelected: function() { page._onNetworkTap(n) } })
         if (n.saved)
             items.push({ label: "Esquecer rede", destructive: true,
                          onSelected: function() { Settings.network.forgetSsid(ssid) } })
         ActionSheet.show({ title: ssid, items: items })
     }
 
+    // Keep the network list fresh while the page is open. The scan bar itself is
+    // always shown while Wi-Fi is on (the page is continuously rescanning).
     Component.onCompleted: if (Settings.network.wifiPowered) Settings.network.scanWifi()
     Timer {
-        interval: 12000; repeat: true; running: Settings.network.wifiPowered
+        interval: 8000; repeat: true; running: Settings.network.wifiPowered
         triggeredOnStart: true
         onTriggered: Settings.network.scanWifi()
     }
@@ -56,6 +58,7 @@ VerticalFadeFlickable {
         ToggleRow {
             first: true
             text: "Wi-Fi"
+            labelFont: Tokens.font.body.medium
             checked: Settings.network.wifiPowered
             onToggled: Settings.network.setWifiPowered(checked)
         }
@@ -67,7 +70,11 @@ VerticalFadeFlickable {
             showList: Settings.network.wifiPowered
             placeholderIcon: Settings.network.wifiPowered ? "wifi_find" : "signal_wifi_off"
             placeholderText: Settings.network.wifiPowered ? "Nenhuma rede encontrada" : "Wi-Fi desligado"
-            extraHeight: Settings.network.scanning ? Tokens.rounding.extraSmall : 0
+            // Scan bar lives INSIDE the list card (over the solid surface) exactly
+            // like the Bluetooth pair page — the only place the native
+            // StyledProgressBar reliably composites here. Reserve its strip and
+            // push the list below it; gate on the stable global wifiPowered.
+            extraHeight: Settings.network.wifiPowered ? scanIndicator.implicitHeight : 0
             list.anchors.top: scanIndicator.bottom
 
             model: Settings.network.wifiPowered ? Settings.network.networks : []
@@ -88,7 +95,7 @@ VerticalFadeFlickable {
                 radius: Tokens.rounding.extraSmall
                 disabled: connecting
 
-                onClicked: if (!connecting) root._onNetworkTap(modelData)
+                onClicked: if (!connecting) page._onNetworkTap(modelData)
 
                 RowLayout {
                     id: netLayout
@@ -99,7 +106,7 @@ VerticalFadeFlickable {
                     spacing: Tokens.spacing.medium
 
                     MaterialIcon {
-                        symbol: Icons.getNetworkIcon(net.modelData.strength, root._isSecure(net.modelData))
+                        symbol: Icons.getNetworkIcon(net.modelData.strength, page._isSecure(net.modelData))
                         color: net.current ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
                         fontStyle: Tokens.font.icon.medium
                         opacity: net.connecting ? 0.5 : 1
@@ -118,7 +125,7 @@ VerticalFadeFlickable {
                         }
                         StyledText {
                             Layout.fillWidth: true
-                            text: "Segurança: " + (root._isSecure(net.modelData) ? net.modelData.security.toUpperCase() : "aberta")
+                            text: "Segurança: " + (page._isSecure(net.modelData) ? net.modelData.security.toUpperCase() : "aberta")
                                   + (net.saved ? "  •  Salva" : "")
                                   + (net.current ? "  •  Conectado" : "")
                             color: Colours.palette.m3outline
@@ -148,25 +155,21 @@ VerticalFadeFlickable {
                         }
                         StateLayer {
                             disabled: net.connecting || !(net.saved || net.current)
-                            onClicked: root._onNetworkOptions(net.modelData)
+                            onClicked: page._onNetworkOptions(net.modelData)
                         }
                     }
                 }
             }
 
-            // Indeterminate scan bar pinned to the top of the list card; height
-            // animates in/out so the bar never stops looping (it stays
-            // indeterminate the whole time, just collapses to 0px when idle).
+            // Same indeterminate M3 bar as the Bluetooth pair page, pinned to the
+            // top of the list card. Hidden when Wi-Fi is off.
             StyledProgressBar {
                 id: scanIndicator
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
+                anchors { left: parent.left; right: parent.right; top: parent.top }
                 anchors.margins: 1
-                implicitHeight: Settings.network.scanning ? Tokens.rounding.extraSmall : 0
+                implicitHeight: Tokens.rounding.extraSmall
                 indeterminate: true
-
-                Behavior on implicitHeight { CAnim {} }
+                visible: Settings.network.wifiPowered
             }
         }
     }

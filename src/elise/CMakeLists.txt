@@ -25,6 +25,8 @@ qt_add_executable(elise
     core/PlayerController.cpp
     core/NavigationController.h
     core/NavigationController.cpp
+    core/WeatherController.h
+    core/WeatherController.cpp
     core/settings/SettingsController.h
     core/settings/SettingsController.cpp
     core/settings/SystemInfoController.h
@@ -91,6 +93,7 @@ qt_add_qml_module(elise
         ui/CarMap.qml
         ui/MapSearchBar.qml
         ui/PlayerCard.qml
+        ui/WeatherCard.qml
         ui/NavigationOverlay.qml
         ui/NotificationLayer.qml
         ui/GlobalInputBlocker.qml

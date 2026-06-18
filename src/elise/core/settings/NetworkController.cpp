@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QMetaObject>
+#include <QThreadPool>
 #include <QVariantMap>
 
 #include <cstring>
@@ -165,37 +166,47 @@ void NetworkController::connect() {
             sdbus::ObjectPath{ifacePath});
 
         // Watch State / CurrentBSS / BSSs / Networks via PropertiesChanged.
+        // These handlers run on the D-Bus connection's own event loop thread.
+        // refreshState()/rebuildNetworks() do their blocking proxy reads HERE
+        // (on the bus thread) and marshal only the finished data back to the
+        // GUI thread, so the GUI thread never blocks on D-Bus I/O.
         m_iface->uponSignal("PropertiesChanged")
             .onInterface(kIfaceIf)
             .call([this](const std::map<std::string, sdbus::Variant> &/*changed*/) {
-                QMetaObject::invokeMethod(this, [this]{
-                    refreshState();
-                    rebuildNetworks();
-                }, Qt::QueuedConnection);
+                refreshState();
+                rebuildNetworks();
             });
 
         m_iface->uponSignal("BSSAdded").onInterface(kIfaceIf)
             .call([this](const sdbus::ObjectPath &/*p*/,
                          const std::map<std::string, sdbus::Variant> &/*props*/) {
-                QMetaObject::invokeMethod(this, [this]{ rebuildNetworks(); }, Qt::QueuedConnection);
+                rebuildNetworks();
             });
         m_iface->uponSignal("BSSRemoved").onInterface(kIfaceIf)
             .call([this](const sdbus::ObjectPath &/*p*/) {
-                QMetaObject::invokeMethod(this, [this]{ rebuildNetworks(); }, Qt::QueuedConnection);
+                rebuildNetworks();
             });
         m_iface->uponSignal("ScanDone").onInterface(kIfaceIf)
             .call([this](bool /*success*/) {
                 QMetaObject::invokeMethod(this, [this]{
                     if (m_scanning) { m_scanning = false; emit changed(); }
-                    rebuildNetworks();
                 }, Qt::QueuedConnection);
+                rebuildNetworks();
             });
 
         m_conn->enterEventLoopAsync();
 
-        refreshState();
-        rebuildNetworks();
-        scanWifi();   // kick a first scan
+        // Initial population. We're on the GUI thread (constructor) and these
+        // reads block on D-Bus I/O, so run them on a pool worker. sdbus-c++
+        // IProxy calls are thread-safe by design (the proxy serialises access
+        // to the connection), so issuing them from a worker concurrently with
+        // the async event loop is safe; both functions marshal their results
+        // back to the GUI thread before touching member state / emitting.
+        QThreadPool::globalInstance()->start([this]{
+            refreshState();
+            rebuildNetworks();
+        });
+        scanWifi();   // kick a first scan (non-blocking, dontExpectReply)
     } catch (const sdbus::Error &e) {
         qWarning() << "NetworkController: connect failed:"
                    << e.getName().c_str() << "—" << e.getMessage().c_str();
@@ -203,14 +214,14 @@ void NetworkController::connect() {
     }
 }
 
+// Runs on the bus/worker thread. Does the blocking proxy reads, then hands the
+// raw results to applyState() on the GUI thread.
 void NetworkController::refreshState() {
     if (!m_iface) return;
     try {
         auto state = m_iface->getProperty("State")
                             .onInterface(kIfaceIf).get<std::string>();
         QString s = QString::fromStdString(state);
-        const bool prevPowered = m_wifiPowered;
-        m_wifiPowered = (s != QLatin1String("interface_disabled"));
 
         QString ssid;
         try {
@@ -225,6 +236,22 @@ void NetworkController::refreshState() {
                 ssid = ssidFromBytes(bytes);
             }
         } catch (...) { /* no current bss */ }
+
+        QMetaObject::invokeMethod(this, [this, s, ssid]{
+            applyState(s, ssid);
+        }, Qt::QueuedConnection);
+    } catch (const sdbus::Error &e) {
+        qWarning() << "NetworkController: refreshState:" << e.getMessage().c_str();
+    }
+}
+
+// Runs on the GUI thread. Owns the connecting-state machine and all member
+// mutation / signal emission.
+void NetworkController::applyState(const QString &s, const QString &currentSsid) {
+    {
+        const bool prevPowered = m_wifiPowered;
+        m_wifiPowered = (s != QLatin1String("interface_disabled"));
+        const QString ssid = currentSsid;
 
         // Clear connecting marker once we either finish, fail, or are clearly idle.
         if (!m_connectingSsid.isEmpty()) {
@@ -267,19 +294,21 @@ void NetworkController::refreshState() {
         } else {
             emit changed();   // connectingSsid may have changed
         }
-    } catch (const sdbus::Error &e) {
-        qWarning() << "NetworkController: refreshState:" << e.getMessage().c_str();
     }
 }
 
+// Runs on the bus/worker thread. Does all blocking proxy reads here, then hands
+// the finished list + ssid->path cache to applyNetworks() on the GUI thread.
 void NetworkController::rebuildNetworks() {
     if (!m_iface) return;
     try {
         auto bsss = m_iface->getProperty("BSSs")
                           .onInterface(kIfaceIf).get<std::vector<sdbus::ObjectPath>>();
 
-        // Build a set of saved SSIDs by walking Networks.
+        // Walk Networks once: collect the set of saved SSIDs AND the
+        // ssid->path cache that findSavedNetworkPath() consults on a tap.
         QSet<QString> saved;
+        QHash<QString, QString> savedPaths;
         try {
             auto nets = m_iface->getProperty("Networks")
                               .onInterface(kIfaceIf).get<std::vector<sdbus::ObjectPath>>();
@@ -293,7 +322,10 @@ void NetworkController::rebuildNetworks() {
                     auto it = props.find("ssid");
                     if (it != props.end()) {
                         QString s = ssidFromVariant(it->second);
-                        if (!s.isEmpty()) saved.insert(s);
+                        if (!s.isEmpty()) {
+                            saved.insert(s);
+                            savedPaths.insert(s, QString::fromStdString(np));
+                        }
                     }
                 } catch (...) {}
             }
@@ -360,11 +392,20 @@ void NetworkController::rebuildNetworks() {
             return a.toMap()["strength"].toInt() > b.toMap()["strength"].toInt();
         });
 
-        m_networks = std::move(out);
-        emit networksChanged();
+        QMetaObject::invokeMethod(this,
+            [this, out = std::move(out), savedPaths = std::move(savedPaths)]() mutable {
+                applyNetworks(std::move(out), std::move(savedPaths));
+            }, Qt::QueuedConnection);
     } catch (const sdbus::Error &e) {
         qWarning() << "NetworkController: rebuildNetworks:" << e.getMessage().c_str();
     }
+}
+
+// Runs on the GUI thread. Assigns the freshly-built list + cache and notifies.
+void NetworkController::applyNetworks(QVariantList nets, QHash<QString, QString> savedPaths) {
+    m_savedPaths = std::move(savedPaths);
+    m_networks   = std::move(nets);
+    emit networksChanged();
 }
 
 QString NetworkController::readIfaceIp(const char *name) const {
@@ -384,31 +425,20 @@ QString NetworkController::readIfaceIp(const char *name) const {
     return out;
 }
 
+// O(1) in-memory lookup against the cache rebuildNetworks() maintains. No
+// D-Bus I/O — safe to call on the GUI thread from a tap handler. The cache is
+// kept current by the signal-driven enumeration (ScanDone / BSS* /
+// PropertiesChanged), so a saved network added out-of-band shows up after the
+// next refresh; the connect paths fall back to addNetwork on a cache miss.
 QString NetworkController::findSavedNetworkPath(const QString &ssid) const {
-    if (!m_iface) return {};
-    try {
-        auto nets = m_iface->getProperty("Networks")
-                          .onInterface(kIfaceIf).get<std::vector<sdbus::ObjectPath>>();
-        for (const auto &np : nets) {
-            auto n = sdbus::createProxy(*m_conn,
-                sdbus::ServiceName{kService}, sdbus::ObjectPath{np});
-            try {
-                auto props = n->getProperty("Properties")
-                              .onInterface(kNetworkIf)
-                              .get<std::map<std::string, sdbus::Variant>>();
-                auto it = props.find("ssid");
-                if (it != props.end()) {
-                    if (ssidFromVariant(it->second) == ssid)
-                        return QString::fromStdString(np);
-                }
-            } catch (...) {}
-        }
-    } catch (...) {}
-    return {};
+    return m_savedPaths.value(ssid);
 }
 
-QString NetworkController::addNetwork(const QString &ssid, const QString &psk) {
-    if (!m_iface) return {};
+// Async AddNetwork: issues callMethodAsync and returns immediately. The reply
+// lands on the bus thread; we marshal back to the GUI thread to SelectNetwork
+// and to refresh the cache. Never blocks the caller.
+void NetworkController::addNetworkAndSelect(const QString &ssid, const QString &psk) {
+    if (!m_iface) return;
     std::map<std::string, sdbus::Variant> args;
     // Pass SSID as a byte array (`ay`). If we pass it as a string variant
     // wpa_supplicant re-quotes it on store, ending up with `""SSID""` and
@@ -438,15 +468,31 @@ QString NetworkController::addNetwork(const QString &ssid, const QString &psk) {
             "2412 2417 2422 2427 2432 2437 2442 2447 2452 2457 2462"}};
     }
 
-    sdbus::ObjectPath path;
+    // Fire-and-forget from the GUI thread's perspective: the reply is delivered
+    // on the bus event loop thread. We marshal it back to the GUI thread to
+    // touch member state (m_savedPaths) and emit. Capturing ssid lets us keep
+    // the cache warm so a follow-up tap resolves without a round-trip.
     try {
-        m_iface->callMethod("AddNetwork").onInterface(kIfaceIf)
-               .withArguments(args).storeResultsTo(path);
+        m_iface->callMethodAsync("AddNetwork").onInterface(kIfaceIf)
+               .withArguments(args)
+               .uponReplyInvoke([this, ssid](std::optional<sdbus::Error> err,
+                                             const sdbus::ObjectPath &path) {
+                    if (err) {
+                        const QString msg = QString::fromStdString(err->getMessage());
+                        QMetaObject::invokeMethod(this, [this, msg]{
+                            emit errorOccurred(msg);
+                        }, Qt::QueuedConnection);
+                        return;
+                    }
+                    const QString p = QString::fromStdString(path);
+                    QMetaObject::invokeMethod(this, [this, ssid, p]{
+                        if (!p.isEmpty()) m_savedPaths.insert(ssid, p);
+                        selectNetworkPath(p);
+                    }, Qt::QueuedConnection);
+               });
     } catch (const sdbus::Error &e) {
         emit errorOccurred(QString::fromStdString(e.getMessage()));
-        return {};
     }
-    return QString::fromStdString(path);
 }
 
 void NetworkController::selectNetworkPath(const QString &path) {
@@ -463,27 +509,41 @@ void NetworkController::selectNetworkPath(const QString &path) {
 // ── Mutators ────────────────────────────────────────────────────────────────
 
 void NetworkController::setWifiPowered(bool on) {
-    const QString rk = findWlanRfkill();
-    if (rk.isEmpty()) {
-        emit errorOccurred(QStringLiteral("rfkill: no wlan switch found"));
-        return;
-    }
-    if (!writeRfkillSoft(rk, on)) {
-        emit errorOccurred(QStringLiteral("rfkill: write failed (run as root)"));
-        return;
-    }
+    if (on == m_wifiPowered) return;
 
-    // Unblocking rfkill leaves wlan0 in the link-down state it was forced
-    // into; bring it back up so wpa_supplicant can leave "interface_disabled".
-    // On power-off we drop the link first, then block rfkill.
-    if (on) {
-        setIfaceUp("wlan0", true);
-    } else {
-        setIfaceUp("wlan0", false);
-    }
-
+    // Reflect the new state on the UI immediately. The actual radio toggle
+    // (rfkill sysfs write + SIOCSIFFLAGS ioctl) blocks the calling thread
+    // while the brcmfmac driver tears the link up/down — turning OFF is
+    // especially slow as the kernel synchronously disassociates and flushes
+    // the queues. Doing that on the GUI thread froze the whole UI, so the
+    // toggle binds to m_wifiPowered and we push the blocking work to a
+    // worker thread (mirrors AudioController's "emit now, do I/O later").
     m_wifiPowered = on;
     emit changed();
+
+    // findWlanRfkill / writeRfkillSoft / setIfaceUp are free functions that
+    // touch no member state, so running them on the pool is race-free. Errors
+    // are marshalled back to the GUI thread before emitting.
+    QThreadPool::globalInstance()->start([this, on]{
+        const QString rk = findWlanRfkill();
+        QString err;
+        if (rk.isEmpty()) {
+            err = QStringLiteral("rfkill: no wlan switch found");
+        } else if (!writeRfkillSoft(rk, on)) {
+            err = QStringLiteral("rfkill: write failed (run as root)");
+        } else {
+            // Unblocking rfkill leaves wlan0 in the link-down state it was
+            // forced into; bring it back up so wpa_supplicant can leave
+            // "interface_disabled". On power-off we drop the link too.
+            setIfaceUp("wlan0", on);
+        }
+        if (!err.isEmpty()) {
+            QMetaObject::invokeMethod(this, [this, err]{
+                emit errorOccurred(err);
+            }, Qt::QueuedConnection);
+        }
+    });
+
     if (on) {
         // Give the radio a moment to come up before kicking a scan.
         QTimer::singleShot(800, this, &NetworkController::scanWifi);
@@ -515,9 +575,11 @@ void NetworkController::connectOpen(const QString &ssid) {
     emit changed();
     // Reuse a previously saved entry for this SSID when present — avoids
     // accumulating duplicates and lets wpa_supplicant pick a faster path.
-    QString path = findSavedNetworkPath(ssid);
-    if (path.isEmpty()) path = addNetwork(ssid, {});
-    selectNetworkPath(path);
+    // The lookup is an O(1) cache hit (no D-Bus I/O); on a miss we add the
+    // network asynchronously and SelectNetwork from the reply callback.
+    const QString path = findSavedNetworkPath(ssid);
+    if (path.isEmpty()) addNetworkAndSelect(ssid, {});
+    else                selectNetworkPath(path);
 }
 
 void NetworkController::connectWithPassphrase(const QString &ssid, const QString &psk) {
@@ -526,17 +588,19 @@ void NetworkController::connectWithPassphrase(const QString &ssid, const QString
     m_lastError.clear();
     emit changed();
     // User just typed a (possibly new) password — replace any prior entry
-    // for this SSID so the fresh psk wins, then SelectNetwork.
-    QString existing = findSavedNetworkPath(ssid);
+    // for this SSID so the fresh psk wins, then SelectNetwork. The lookup is
+    // an O(1) cache hit and RemoveNetwork is fire-and-forget, so nothing here
+    // blocks the GUI thread. AddNetwork + SelectNetwork happen asynchronously.
+    const QString existing = findSavedNetworkPath(ssid);
     if (!existing.isEmpty()) {
         try {
             m_iface->callMethod("RemoveNetwork").onInterface(kIfaceIf)
                    .withArguments(sdbus::ObjectPath{existing.toStdString()})
                    .dontExpectReply();
         } catch (...) {}
+        m_savedPaths.remove(ssid);   // stale path, will be re-added on reply
     }
-    QString path = addNetwork(ssid, psk);
-    selectNetworkPath(path);
+    addNetworkAndSelect(ssid, psk);
 }
 
 void NetworkController::reconnectSaved(const QString &ssid) {
@@ -562,12 +626,13 @@ void NetworkController::disconnectCurrent() {
 }
 
 void NetworkController::forgetSsid(const QString &ssid) {
-    QString path = findSavedNetworkPath(ssid);
+    const QString path = findSavedNetworkPath(ssid);   // O(1) cache lookup
     if (path.isEmpty() || !m_iface) return;
     try {
         m_iface->callMethod("RemoveNetwork").onInterface(kIfaceIf)
                .withArguments(sdbus::ObjectPath{path.toStdString()})
                .dontExpectReply();
+        m_savedPaths.remove(ssid);   // drop locally; next refresh confirms
     } catch (const sdbus::Error &e) {
         emit errorOccurred(QString::fromStdString(e.getMessage()));
     }

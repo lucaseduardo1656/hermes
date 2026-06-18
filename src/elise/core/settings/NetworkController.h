@@ -77,12 +77,25 @@ signals:
 
 private:
     void connect();
+    // Enumerates BSSs + saved Networks on the D-Bus connection's own event
+    // loop thread (never the GUI thread), then marshals the finished list and
+    // the ssid->path cache back to the GUI thread for assignment + emit.
     void rebuildNetworks();
+    // Reads Interface.State / CurrentBSS on the bus thread and marshals the
+    // resulting strings back to the GUI thread.
     void refreshState();
     QString readIfaceIp(const char *name) const;
+    // O(1) in-memory lookup against m_savedPaths (populated by rebuildNetworks).
+    // No D-Bus I/O — safe to call from the GUI thread on a tap.
     QString findSavedNetworkPath(const QString &ssid) const;
-    QString addNetwork(const QString &ssid, const QString &psk);   // returns network path
+    // Async AddNetwork: returns immediately; on reply (bus thread) it marshals
+    // back to the GUI thread to SelectNetwork. Never blocks the caller.
+    void addNetworkAndSelect(const QString &ssid, const QString &psk);
     void selectNetworkPath(const QString &path);
+    // Applies a freshly-built network list + saved-path cache. GUI thread only.
+    void applyNetworks(QVariantList nets, QHash<QString, QString> savedPaths);
+    // Applies freshly-read interface state. GUI thread only.
+    void applyState(const QString &state, const QString &currentSsid);
 
     std::unique_ptr<sdbus::IConnection> m_conn;
     std::unique_ptr<sdbus::IProxy>      m_iface;        // wpa_supplicant1.Interface
@@ -98,4 +111,10 @@ private:
     bool    m_wifiPowered = false;
     QTimer  m_ipPoll;
     QVariantList m_networks;
+
+    // ssid -> wpa_supplicant Network object path for every saved network.
+    // Rebuilt by rebuildNetworks() (on the bus thread) and assigned on the GUI
+    // thread. Lets findSavedNetworkPath() resolve a tap with no D-Bus I/O.
+    // Only touched on the GUI thread.
+    QHash<QString, QString> m_savedPaths;
 };

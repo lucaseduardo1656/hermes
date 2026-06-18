@@ -59,7 +59,10 @@ ProgressBar {
 
     contentItem: Loader {
         anchors.fill: parent
-        asynchronous: true
+        // Synchronous: an async load is deferred while the bar is hidden (height
+        // 0 / clipped / opacity 0), so a bar that starts hidden never populates
+        // its indeterminate content and stays blank when later revealed.
+        asynchronous: false
         sourceComponent: root.indeterminate || root.indeterminateAnimState !== StyledProgressBar.Stopped ? indeterminateComp : determinateComp
     }
 
