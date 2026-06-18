@@ -70,6 +70,12 @@ set_source_files_properties(ui/Colours.qml PROPERTIES
 set_source_files_properties(ui/CUtils.qml PROPERTIES
     QT_QML_SINGLETON_TYPE TRUE
 )
+set_source_files_properties(ui/MaterialSymbols.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE TRUE
+)
+set_source_files_properties(ui/MaterialSymbolsCodepoints.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE TRUE
+)
 
 qt_add_qml_module(elise
     URI Elise
@@ -125,6 +131,8 @@ qt_add_qml_module(elise
         ui/Elevation.qml
         ui/FilledSlider.qml
         ui/CUtils.qml
+        ui/MaterialSymbols.qml
+        ui/MaterialSymbolsCodepoints.qml
         ui/StateLayer.qml
         ui/CustomMouseArea.qml
         ui/ButtonBase.qml
@@ -147,6 +155,12 @@ qt_add_qml_module(elise
         ui/StyledSlider.qml
         ui/StyledProgressBar.qml
         ui/CircularProgress.qml
+        ui/ConnectedRect.qml
+        ui/InfoRow.qml
+        ui/StyledFlickable.qml
+        ui/VerticalFadeFlickable.qml
+        ui/Mask.qml
+        ui/SliderRow.qml
 )
 
 qt_add_resources(elise "elise_icons"

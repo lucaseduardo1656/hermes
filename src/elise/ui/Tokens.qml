@@ -8,15 +8,19 @@ import QtQuick
 QtObject {
     id: root
 
+    // Real Caelestia token values (plugin/src/Caelestia/Config/tokens.hpp).
     readonly property QtObject rounding: QtObject {
-        readonly property real scale:       1.0
-        readonly property int none:         0
-        readonly property int extraSmall:   8
-        readonly property int small:        12
-        readonly property int medium:       14
-        readonly property int large:        20
-        readonly property int extraLarge:   28
-        readonly property int full:         9999
+        readonly property real scale:               1.0
+        readonly property int none:                 0
+        readonly property int extraSmall:           4
+        readonly property int small:                8
+        readonly property int medium:               12
+        readonly property int large:                16
+        readonly property int largeIncreased:       20
+        readonly property int extraLarge:           28
+        readonly property int extraLargeIncreased:  32
+        readonly property int extraExtraLarge:      48
+        readonly property int full:                 9999
     }
 
     readonly property QtObject padding: QtObject {
@@ -24,17 +28,21 @@ QtObject {
         readonly property int small:                8
         readonly property int medium:               12
         readonly property int large:                16
-        readonly property int extraLarge:           24
-        readonly property int extraLargeIncreased:  28
+        readonly property int largeIncreased:       20
+        readonly property int extraLarge:           28
+        readonly property int extraLargeIncreased:  32
+        readonly property int extraExtraLarge:      48
     }
 
     readonly property QtObject spacing: QtObject {
-        readonly property int extraSmall:      4
-        readonly property int small:           8
-        readonly property int medium:          12
-        readonly property int large:           16
-        readonly property int largeIncreased:  20
-        readonly property int extraLarge:      24
+        readonly property int extraSmall:           4
+        readonly property int small:                8
+        readonly property int medium:               12
+        readonly property int large:                16
+        readonly property int largeIncreased:       20
+        readonly property int extraLarge:           28
+        readonly property int extraLargeIncreased:  32
+        readonly property int extraExtraLarge:      48
     }
 
     readonly property QtObject transparency: QtObject {
@@ -70,10 +78,17 @@ QtObject {
     }
 
     readonly property QtObject font: QtObject {
+        // UI text family (Caelestia uses JetBrains Mono).
+        readonly property string family: "JetBrains Mono"
         readonly property QtObject body: QtObject {
-            readonly property font small:  Qt.font({ pointSize: 11 })
-            readonly property font medium: Qt.font({ pointSize: 13 })
-            readonly property font large:  Qt.font({ pointSize: 15 })
+            readonly property font small:  Qt.font({ family: "JetBrains Mono", pointSize: 11 })
+            readonly property font medium: Qt.font({ family: "JetBrains Mono", pointSize: 13 })
+            readonly property font large:  Qt.font({ family: "JetBrains Mono", pointSize: 15 })
+        }
+        readonly property QtObject label: QtObject {
+            readonly property font small:  Qt.font({ family: "JetBrains Mono", pointSize: 9 })
+            readonly property font medium: Qt.font({ family: "JetBrains Mono", pointSize: 10 })
+            readonly property font large:  Qt.font({ family: "JetBrains Mono", pointSize: 11 })
         }
         readonly property QtObject icon: QtObject {
             readonly property font small:  Qt.font({ family: "Material Symbols Rounded", pointSize: 16 })
@@ -84,10 +99,12 @@ QtObject {
         // Fluent font builders (upstream Tokens.font.title.builders.*). Each
         // builder exposes weight(w).build() → a `font` value.
         readonly property QtObject title: QtObject {
+            readonly property font large:  Qt.font({ family: "JetBrains Mono", pointSize: 18, weight: Font.Medium })
+            readonly property font medium: Qt.font({ family: "JetBrains Mono", pointSize: 15, weight: Font.Medium })
             readonly property var builders: ({
                 medium: {
                     weight: function (w) {
-                        return { build: function () { return Qt.font({ pointSize: 16, weight: w }); } };
+                        return { build: function () { return Qt.font({ family: "JetBrains Mono", pointSize: 16, weight: w }); } };
                     }
                 }
             })

@@ -2,24 +2,17 @@ import QtQuick
 import QtQuick.Layouts
 import Elise
 
-// Port of Caelestia's components/SectionHeader.qml.
-ColumnLayout {
-    id: root
+// Port of Caelestia's modules/nexus/common/SectionHeader.qml — a small muted
+// group header used inside a settings ColumnLayout.
+StyledText {
+    property bool first
 
-    required property string title
-    property string description: ""
+    Layout.fillWidth: true
+    Layout.topMargin: first ? 0 : Tokens.spacing.largeIncreased - ((parent as ColumnLayout)?.spacing ?? 0)
+    Layout.bottomMargin: Tokens.spacing.extraSmall
+    Layout.leftMargin: Tokens.padding.small
 
-    spacing: 0
-
-    StyledText {
-        Layout.topMargin: Tokens.spacing.largeIncreased
-        text: root.title
-        font: Tokens.font.title.builders.medium.weight(Font.Medium).build()
-    }
-
-    StyledText {
-        visible: root.description !== ""
-        text: root.description
-        color: Colours.palette.m3outline
-    }
+    color: Colours.palette.m3onSurfaceVariant
+    font: Tokens.font.label.medium
+    elide: Text.ElideRight
 }

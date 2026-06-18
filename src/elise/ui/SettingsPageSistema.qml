@@ -1,14 +1,19 @@
 import QtQuick
+import QtQuick.Layouts
 import Elise
 
-// Page: About — Caelestia layout (#22/#23). A hero card with the Elise logo +
-// version, then grouped info rows (Sistema / Software) and the power actions.
+// Page: About — mirrors Caelestia's modules/nexus/pages/AboutPage.qml: a hero
+// ConnectedRect (logo + name + version), then grouped InfoRows under section
+// headers. Flickable root (sized by the settings page Loader) so it scrolls.
 //
-// Bound to `Settings.sys` (SystemInfoController) over D-Bus; dashes render when
-// the daemon link is down rather than showing stale numbers.
-Item {
+// Bound to `Settings.sys` (SystemInfoController) over D-Bus.
+VerticalFadeFlickable {
     id: root
     clip: true
+    contentWidth: width
+    contentHeight: _col.implicitHeight + topMargin + bottomMargin
+    topMargin: Tokens.padding.large
+    bottomMargin: Tokens.padding.extraLarge
 
     function _formatGB(bytes) {
         if (!bytes) return "—"
@@ -39,159 +44,105 @@ Item {
         { label: "Daemon", value: Settings.sys.online ? "conectado" : "desconectado" }
     ]
 
-    Flickable {
-        anchors.fill: parent
-        contentHeight: _col.height
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
+    // Section header (Caelestia nexus SectionHeader style).
+    component Header: StyledText {
+        property bool first: false
+        Layout.fillWidth: true
+        Layout.topMargin: first ? 0 : Tokens.spacing.largeIncreased
+        Layout.bottomMargin: Tokens.spacing.extraSmall
+        Layout.leftMargin: Tokens.padding.small
+        color: Colours.palette.m3onSurfaceVariant
+        font: Tokens.font.label.medium
+        elide: Text.ElideRight
+    }
 
-        Column {
-            id: _col
-            width: parent.width
-            spacing: Theme.spaceL
+    ColumnLayout {
+        id: _col
+        anchors { left: parent.left; right: parent.right; top: parent.top
+                  leftMargin: Tokens.padding.large; rightMargin: Tokens.padding.large }
+        spacing: Tokens.spacing.extraSmall / 2
 
-            // ── Hero card ─────────────────────────────────────────────────
-            Rectangle {
-                width: parent.width; height: 220
-                radius: Theme.radiusL
-                color: Qt.rgba(1, 1, 1, 0.05)
-                Column {
-                    anchors.centerIn: parent
-                    spacing: Theme.spaceS
-                    SvgIcon {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        source: "qrc:/icons/elise-logo.svg"
-                        color: System.accent; size: 64
-                    }
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: "Elise"; color: System.textPrimary
-                        font.pixelSize: 34; font.weight: Font.Bold
-                    }
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: "v" + (Settings.sys.appVersion || "0.1")
-                        color: System.textSecondary; font.pixelSize: Theme.fontBody
-                    }
+        // ── Hero ──────────────────────────────────────────────────────────
+        ConnectedRect {
+            Layout.fillWidth: true
+            first: true
+            last: true
+            implicitHeight: hero.implicitHeight + Tokens.padding.extraLarge * 2
+
+            ColumnLayout {
+                id: hero
+                anchors.centerIn: parent
+                width: parent.width - Tokens.padding.largeIncreased * 2
+                spacing: Tokens.spacing.small
+
+                SvgIcon {
+                    Layout.alignment: Qt.AlignHCenter
+                    source: "qrc:/icons/elise-logo.svg"
+                    color: System.accent; size: 72
+                }
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: Tokens.spacing.small
+                    text: "Elise"
+                    font.pixelSize: 32; font.weight: Font.Bold
+                }
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "v" + (Settings.sys.appVersion || "0.1")
+                    color: Colours.palette.m3onSurfaceVariant
+                    font: Tokens.font.body.medium
                 }
             }
+        }
 
-            // ── Sistema group ─────────────────────────────────────────────
-            Column {
-                width: parent.width
-                spacing: Theme.spaceS
-                Text { text: "Sistema"; color: System.textSecondary
-                       font.pixelSize: Theme.fontLabel; font.weight: Font.Medium
-                       leftPadding: Theme.spaceXS }
-                Rectangle {
-                    width: parent.width; height: _sysCol.height
-                    radius: Theme.radiusL; color: Qt.rgba(1, 1, 1, 0.05); clip: true
-                    Column {
-                        id: _sysCol
-                        width: parent.width
-                        Repeater {
-                            model: root._system
-                            delegate: Item {
-                                required property var modelData
-                                required property int index
-                                width: _sysCol.width; height: 52
-                                Text { anchors { left: parent.left; leftMargin: Theme.spaceL
-                                                 verticalCenter: parent.verticalCenter }
-                                       text: modelData.label; color: System.textPrimary
-                                       font.pixelSize: Theme.fontBody }
-                                Text { anchors { right: parent.right; rightMargin: Theme.spaceL
-                                                 verticalCenter: parent.verticalCenter }
-                                       text: modelData.value; color: System.textSecondary
-                                       font.pixelSize: Theme.fontBody }
-                                Rectangle { visible: index < root._system.length - 1
-                                            anchors { left: parent.left; right: parent.right
-                                                      leftMargin: Theme.spaceL; rightMargin: Theme.spaceL
-                                                      bottom: parent.bottom }
-                                            height: 1; color: Qt.rgba(1, 1, 1, 0.06) }
-                            }
-                        }
-                    }
-                }
+        // ── Sistema ───────────────────────────────────────────────────────
+        Header { first: true; text: "Sistema" }
+        Repeater {
+            model: root._system
+            delegate: InfoRow {
+                required property var modelData
+                required property int index
+                first: index === 0
+                last: index === root._system.length - 1
+                label: modelData.label
+                value: modelData.value
             }
+        }
 
-            // ── Software group ────────────────────────────────────────────
-            Column {
-                width: parent.width
-                spacing: Theme.spaceS
-                Text { text: "Software"; color: System.textSecondary
-                       font.pixelSize: Theme.fontLabel; font.weight: Font.Medium
-                       leftPadding: Theme.spaceXS }
-                Rectangle {
-                    width: parent.width; height: _swCol.height
-                    radius: Theme.radiusL; color: Qt.rgba(1, 1, 1, 0.05); clip: true
-                    Column {
-                        id: _swCol
-                        width: parent.width
-                        Repeater {
-                            model: root._software
-                            delegate: Item {
-                                required property var modelData
-                                required property int index
-                                width: _swCol.width; height: 52
-                                Text { anchors { left: parent.left; leftMargin: Theme.spaceL
-                                                 verticalCenter: parent.verticalCenter }
-                                       text: modelData.label; color: System.textPrimary
-                                       font.pixelSize: Theme.fontBody }
-                                Text { anchors { right: parent.right; rightMargin: Theme.spaceL
-                                                 verticalCenter: parent.verticalCenter }
-                                       text: modelData.value; color: System.textSecondary
-                                       font.pixelSize: Theme.fontBody }
-                                Rectangle { visible: index < root._software.length - 1
-                                            anchors { left: parent.left; right: parent.right
-                                                      leftMargin: Theme.spaceL; rightMargin: Theme.spaceL
-                                                      bottom: parent.bottom }
-                                            height: 1; color: Qt.rgba(1, 1, 1, 0.06) }
-                            }
-                        }
-                    }
-                }
+        // ── Software ──────────────────────────────────────────────────────
+        Header { text: "Software" }
+        Repeater {
+            model: root._software
+            delegate: InfoRow {
+                required property var modelData
+                required property int index
+                first: index === 0
+                last: index === root._software.length - 1
+                label: modelData.label
+                value: modelData.value
             }
+        }
 
-            // ── Energia group (power actions) ─────────────────────────────
-            Column {
-                width: parent.width
-                spacing: Theme.spaceS
-                Text { text: "Energia"; color: System.textSecondary
-                       font.pixelSize: Theme.fontLabel; font.weight: Font.Medium
-                       leftPadding: Theme.spaceXS }
-                Rectangle {
-                    width: parent.width; height: _pwrCol.height
-                    radius: Theme.radiusL; color: Qt.rgba(1, 1, 1, 0.05); clip: true
-                    Column {
-                        id: _pwrCol
-                        width: parent.width
-                        Item {
-                            width: parent.width; height: 56
-                            Rectangle { anchors.fill: parent
-                                        color: _rebootArea.pressed ? Qt.rgba(1,1,1,0.05) : "transparent" }
-                            Text { anchors { left: parent.left; leftMargin: Theme.spaceL
-                                             verticalCenter: parent.verticalCenter }
-                                   text: "Reiniciar"; color: System.textPrimary; font.pixelSize: Theme.fontBody }
-                            MouseArea { id: _rebootArea; anchors.fill: parent
-                                        onClicked: Settings.sys.reboot() }
-                            Rectangle { anchors { left: parent.left; right: parent.right
-                                                  leftMargin: Theme.spaceL; rightMargin: Theme.spaceL
-                                                  bottom: parent.bottom }
-                                        height: 1; color: Qt.rgba(1, 1, 1, 0.06) }
-                        }
-                        Item {
-                            width: parent.width; height: 56
-                            Rectangle { anchors.fill: parent
-                                        color: _offArea.pressed ? Qt.rgba(1,1,1,0.05) : "transparent" }
-                            Text { anchors { left: parent.left; leftMargin: Theme.spaceL
-                                             verticalCenter: parent.verticalCenter }
-                                   text: "Desligar"; color: System.danger; font.pixelSize: Theme.fontBody }
-                            MouseArea { id: _offArea; anchors.fill: parent
-                                        onClicked: Settings.sys.powerOff() }
-                        }
-                    }
-                }
+        // ── Energia ───────────────────────────────────────────────────────
+        Header { text: "Energia" }
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: Tokens.spacing.extraSmall
+            spacing: Tokens.spacing.medium
+            TextButton {
+                text: "Reiniciar"
+                type: TextButton.Tonal
+                onClicked: Settings.sys.reboot()
             }
+            TextButton {
+                text: "Desligar"
+                type: TextButton.Filled
+                activeColour: Colours.palette.m3error
+                inactiveColour: Colours.palette.m3error
+                inactiveOnColour: Colours.palette.m3onError
+                onClicked: Settings.sys.powerOff()
+            }
+            Item { Layout.fillWidth: true }
         }
     }
 }

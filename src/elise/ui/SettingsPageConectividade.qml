@@ -1,12 +1,16 @@
 import QtQuick
+import QtQuick.Controls
 import Elise
 
 // Page: Network — a Wi-Fi toggle header card over the inline list of nearby
 // networks (Caelestia layout). Password input is delegated to the global
 // Keyboard singleton; per-network actions go through the ActionSheet.
-Item {
+Flickable {
     id: root
     clip: true
+    contentWidth: width
+    contentHeight: _outer.height
+    boundsBehavior: Flickable.StopAtBounds
 
     function _onNetworkTap(n) {
         if (n.ssid === Settings.network.currentSsid) { Settings.network.disconnectCurrent(); return }
@@ -46,12 +50,6 @@ Item {
         onTriggered: Settings.network.scanWifi()
     }
 
-    Flickable {
-        anchors.fill: parent
-        contentHeight: _card.height
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-
         // Two separate cards — a Wi-Fi toggle card and the network list card —
         // with a real gap between them (the panel shows through) so they don't
         // look glued. The scan indicator sweeps in that gap.
@@ -90,23 +88,17 @@ Item {
                 }
             }
 
-            // ── Gap with the scan indicator — matches the spacing between the
-            //    section-menu items so the toggle and list read as one group.
+            // ── Gap with the scan indicator — Caelestia StyledProgressBar
+            //    (indeterminate M3, native WavyLine/LinearIndicatorManager).
             Item {
                 id: _gap
                 width: parent.width; height: Theme.spaceXS; clip: true
-                Rectangle {
-                    id: _scanSeg
-                    width: parent.width * 0.35; height: 2; radius: 1
+                StyledProgressBar {
                     anchors.verticalCenter: parent.verticalCenter
-                    color: System.accent
-                    visible: Settings.network.scanning
-                    SequentialAnimation on x {
-                        running: Settings.network.scanning
-                        loops: Animation.Infinite
-                        NumberAnimation { from: -_scanSeg.width; to: _gap.width
-                                          duration: 1000; easing.type: Easing.InOutQuad }
-                    }
+                    width: parent.width
+                    indeterminate: Settings.network.scanning
+                    opacity: Settings.network.scanning ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: Theme.durFast } }
                 }
             }
 
@@ -213,5 +205,4 @@ Item {
                 }       // _listCol Column
             }           // list card Rectangle
         }               // _outer Column
-    }                   // Flickable
-}                       // root Item
+    }                   // root Flickable

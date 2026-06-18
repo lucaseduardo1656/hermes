@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import Elise
 
 // Settings root surface — Caelestia-style: a search field over a scrollable
@@ -55,24 +56,25 @@ Menu {
             id: _search
             anchors { top: parent.top; left: parent.left; right: parent.right }
             height: Theme.btnLarge
-            radius: Theme.radiusL
-            color: System.surface2
-            border.color: root._searching ? System.accent : System.border
+            radius: Tokens.rounding.full
+            color: Colours.palette.m3surfaceContainerLowest
+            border.color: root._searching ? Colours.palette.m3primary : Colours.palette.m3outlineVariant
             border.width: 1
+            Behavior on border.color { CAnim {} }
 
             SvgIcon {
                 id: _searchIcon
                 anchors { left: parent.left; leftMargin: Theme.spaceL
                           verticalCenter: parent.verticalCenter }
-                source: "qrc:/icons/search.svg"; color: System.textMuted; size: Theme.iconS
+                source: "qrc:/icons/search.svg"; color: Colours.palette.m3onSurfaceVariant; size: Theme.iconS
             }
-            Text {
+            StyledText {
                 anchors { left: _searchIcon.right; leftMargin: Theme.spaceM
                           right: _clearS.left; rightMargin: Theme.spaceS
                           verticalCenter: parent.verticalCenter }
                 text: root._query !== "" ? root._query : "Buscar configuração"
-                color: root._query !== "" ? System.textPrimary : System.textMuted
-                font.pixelSize: Theme.fontMedium
+                color: root._query !== "" ? Colours.palette.m3onSurface : Colours.palette.m3onSurfaceVariant
+                font: Tokens.font.body.large
                 elide: Text.ElideRight
             }
             Rectangle {
@@ -101,26 +103,28 @@ Menu {
             }
         }
 
-        // Scrollable card list
-        Flickable {
+        // Scrollable card list — Caelestia VerticalFadeFlickable (edge fade).
+        VerticalFadeFlickable {
+            id: _sidebarFlick
             anchors { top: _search.bottom; topMargin: Theme.spaceM
                       left: parent.left; right: parent.right; bottom: parent.bottom
                       rightMargin: Theme.spaceS }
             contentHeight: _list.height
             clip: true
-            boundsBehavior: Flickable.StopAtBounds
+            topMargin: Tokens.padding.medium
+            bottomMargin: Tokens.padding.large
 
             Column {
                 id: _list
                 width: parent.width
-                spacing: Theme.spaceL          // gap BETWEEN blocks
+                spacing: Tokens.spacing.medium  // gap BETWEEN blocks
 
                 Repeater {
                     model: root._groups
                     delegate: Column {
                         required property var modelData       // a group (array)
                         width: _list.width
-                        spacing: 2                            // tight WITHIN a block
+                        spacing: Tokens.spacing.extraSmall    // tight WITHIN a block
 
                         Repeater {
                             model: parent.modelData
@@ -157,7 +161,9 @@ Menu {
                   rightMargin: Theme.spaceXXL; bottomMargin: Theme.spaceL }
 
         // Back arrow — shown only when the active page exposes a sub-view
-        // (page.canGoBack). Drives page.goBack().
+        // (page.canGoBack). Uses SvgIcon: the Material Symbols glyph font does
+        // not render on this Qt build (icon fonts fall back to plain text), so
+        // we keep our reliable SVG pipeline for wired icons.
         Rectangle {
             id: _backBtn
             anchors { verticalCenter: _pageTitle.verticalCenter; left: parent.left }
@@ -195,17 +201,7 @@ Menu {
         }
     }
 
-    // ── Close button ──────────────────────────────────────────────────────────
-    Rectangle {
-        anchors { top: parent.top; right: parent.right
-                  topMargin: Theme.spaceL; rightMargin: Theme.spaceL }
-        width: Theme.btnMedium; height: Theme.btnMedium; radius: width / 2
-        z: 20
-        color: _closeArea.pressed ? System.surface2 : "transparent"
-        SvgIcon { anchors.centerIn: parent; source: "qrc:/icons/close.svg"
-                  color: System.textSecondary; size: Theme.iconM }
-        MouseArea { id: _closeArea; anchors.fill: parent; onClicked: root.close() }
-    }
+    // (Close button removed — settings dismiss by swiping the panel down.)
 
     // ── Internal router ──────────────────────────────────────────────────────
     function _pageFor(name) {

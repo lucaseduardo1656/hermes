@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import Elise
 
 // Page: Audio — Caelestia layout (#19). Two grouped blocks (Output / Input),
@@ -7,19 +8,16 @@ import Elise
 // Wired to the controller: Output volume + Output Muted (PipeWire via wpctl).
 // Input + per-app volumes have no backend on this hardware (single speaker
 // sink, no capture), so those controls are cosmetic placeholders.
-Item {
+Flickable {
     id: root
     clip: true
+    contentWidth: width
+    contentHeight: _col.height
+    boundsBehavior: Flickable.StopAtBounds
 
     // Cosmetic state for the Input block (no capture device on this unit).
     property int  _inputVol:   58
     property bool _inputMuted: true
-
-    Flickable {
-        anchors.fill: parent
-        contentHeight: _col.height
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
 
         Column {
             id: _col
@@ -216,4 +214,3 @@ Item {
             }
         }
     }
-}

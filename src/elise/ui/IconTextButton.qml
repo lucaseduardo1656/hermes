@@ -6,7 +6,7 @@ import Elise
 ButtonBase {
     id: root
 
-    property alias icon: iconLabel.text
+    property alias icon: iconLabel.symbol
     property alias text: label.text
 
     readonly property alias iconLabel: iconLabel

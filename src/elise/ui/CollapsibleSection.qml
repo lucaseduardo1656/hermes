@@ -45,7 +45,7 @@ ColumnLayout {
             }
 
             MaterialIcon {
-                text: "expand_more"
+                symbol: "expand_more"
                 rotation: root.expanded ? 180 : 0
                 color: Colours.palette.m3onSurfaceVariant
                 fontStyle: Tokens.font.icon.medium
