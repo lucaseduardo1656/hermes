@@ -1225,7 +1225,7 @@ Item {
             bottomMargin: Theme.spaceL + root.bottomOffset
         }
         width: 64; height: 64; radius: 32
-        color: RoadInfo.overLimit ? "#D32F2F" : Colours.palette.m3surfaceContainer
+        color: RoadInfo.overLimit ? "#D32F2F" : Colours.palette.m3surfaceContainerHigh
         opacity: 0.92
         border.color: RoadInfo.overLimit ? "#FF6B6B" : Colours.palette.m3outlineVariant
         border.width: 1
@@ -1289,7 +1289,7 @@ Item {
         height: Math.min(_poiCol.implicitHeight + 2 * Theme.spaceL,
                          parent.height - anchors.topMargin - Theme.spaceL - root.bottomOffset)
         radius: Theme.radiusL
-        color: Colours.palette.m3surfaceContainer
+        color: Colours.palette.m3surfaceContainerHigh
         border.color: Colours.palette.m3outlineVariant; border.width: 1
         opacity: visible ? 1 : 0
         Behavior on opacity { Anim { type: Anim.DefaultEffects } }
@@ -1505,7 +1505,7 @@ Item {
             bottomMargin: Theme.spaceL + root.bottomOffset + 72
         }
         width: 196; height: 64; radius: 32
-        color: Colours.palette.m3surfaceContainer
+        color: Colours.palette.m3surfaceContainerHigh
         opacity: 0.96
         border.color: Colours.palette.m3outlineVariant; border.width: 1
 
@@ -1558,7 +1558,7 @@ Item {
         width: _locCol.width + Theme.spaceL * 2
         height: _locCol.height + Theme.spaceS * 2
         radius: Theme.radiusM
-        color: Colours.palette.m3surfaceContainer
+        color: Colours.palette.m3surfaceContainerHigh
         opacity: 0.94
         border.color: Colours.palette.m3outlineVariant; border.width: 1
 

@@ -99,6 +99,7 @@ qt_add_qml_module(elise
         ui/WeatherCard.qml
         ui/Popover.qml
         ui/Modal.qml
+        ui/ListRow.qml
         ui/NavigationOverlay.qml
         ui/NotificationLayer.qml
         ui/GlobalInputBlocker.qml

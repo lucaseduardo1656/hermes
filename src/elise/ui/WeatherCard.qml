@@ -28,7 +28,7 @@ Item {
         width: _row.implicitWidth + Theme.spaceM * 2
         height: 44
         radius: Tokens.rounding.full
-        color: Colours.palette.m3surfaceContainer
+        color: Colours.palette.m3surfaceContainerHigh
         border.color: Colours.palette.m3outlineVariant
         border.width: 1
 

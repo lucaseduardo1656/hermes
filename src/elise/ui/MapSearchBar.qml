@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import QtPositioning
 import Elise
 
@@ -12,6 +13,10 @@ import Elise
 // match the settings UI.
 Item {
     id: root
+
+    // Clip so the results panel reveals with a slide-down as the container's
+    // animated height grows, instead of popping in.
+    clip: true
 
     property var map: null
 
@@ -78,18 +83,23 @@ Item {
         }
     }
 
+    // True while a geocode request is in flight (drives the loading bar).
+    property bool _searching: false
+
     // ── Debounced geocode ───────────────────────────────────────────────
     Timer {
         id: _geoDebounce; interval: 600; repeat: false
         onTriggered: {
             const q = root.query.trim()
-            if (q.length < 3 || !root.map) return
+            if (q.length < 3 || !root.map) { root._searching = false; return }
+            root._searching = true
             root.map.geocode(q, function(items) {
                 root.results = items; root.open = items.length > 0
+                root._searching = false
             })
         }
     }
-    onQueryChanged: _geoDebounce.restart()
+    onQueryChanged: { if (query.trim().length >= 3) root._searching = true; _geoDebounce.restart() }
     Connections {
         target: Keyboard
         function onBufferChanged() { if (root._editing) root.query = Keyboard.buffer }
@@ -101,7 +111,7 @@ Item {
         anchors { left: parent.left; right: parent.right; top: parent.top }
         height: root._navigating ? 60 : Theme.btnLarge
         radius: Tokens.rounding.full
-        color: Colours.palette.m3surfaceContainerLowest
+        color: Colours.palette.m3surfaceContainerHigh
         border.color: root._editing ? Colours.palette.m3primary : Colours.palette.m3outlineVariant
         border.width: 1
         Behavior on height { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutQuad } }
@@ -177,10 +187,14 @@ Item {
         anchors { left: parent.left; right: parent.right; top: _field.bottom; topMargin: Tokens.spacing.small }
         height: _panelCol.implicitHeight + Tokens.padding.large * 2
         radius: Tokens.rounding.large
-        color: Colours.palette.m3surfaceContainer
+        color: Colours.palette.m3surfaceContainerHigh
         border.color: Colours.palette.m3outlineVariant; border.width: 1
         visible: root._panelOpen
         clip: true
+
+        // Swallow taps on the panel so they don't fall through to the map
+        // (which would deselect / dismiss the search).
+        MouseArea { anchors.fill: parent }
 
         Column {
             id: _panelCol
@@ -188,10 +202,11 @@ Item {
                       margins: Tokens.padding.large }
             spacing: Tokens.spacing.small
 
-            // Home / Work shortcuts (hidden while actively typing a query)
+            // Home / Work shortcuts — only on the resting panel; hidden once the
+            // keyboard is up (frees vertical space above it on the short screen).
             Row {
                 width: parent.width
-                visible: !root._typing
+                visible: !root._typing && !root._editing
                 spacing: Tokens.spacing.small
 
                 component Shortcut: Rectangle {
@@ -237,40 +252,102 @@ Item {
                 }
             }
 
-            // Tabs (Recentes / Favoritos) — hidden while typing
-            Row {
+            // Tabs (Recentes / Favoritos) — Caelestia dashboard style: icon over
+            // label, full-width, with an animated underline indicator + a
+            // separator. Hidden while typing a query.
+            Column {
                 width: parent.width
                 visible: !root._typing
-                spacing: Tokens.spacing.large
+                spacing: 0
 
-                Repeater {
-                    model: [{ k: "recentes", t: "Recentes" }, { k: "favoritos", t: "Favoritos" }]
-                    Item {
-                        required property var modelData
-                        width: _tabTxt.width; height: 30
-                        StyledText {
-                            id: _tabTxt
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: modelData.t
-                            color: root.tab === modelData.k ? Colours.palette.m3onSurface : Colours.palette.m3onSurfaceVariant
-                            font.pointSize: Tokens.font.body.small.pointSize
-                            font.weight: root.tab === modelData.k ? Font.Bold : Font.Normal
+                readonly property var _tabs: [
+                    { k: "recentes",  t: "Recentes",  ic: "schedule" },
+                    { k: "favoritos", t: "Favoritos", ic: "star" }
+                ]
+
+                RowLayout {
+                    id: _tabBar
+                    width: parent.width
+                    spacing: 0
+                    Repeater {
+                        model: parent.parent._tabs
+                        delegate: Item {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            implicitHeight: _tcol.implicitHeight + Tokens.padding.small * 2
+                            readonly property bool current: root.tab === modelData.k
+
+                            StateLayer {
+                                radius: Tokens.rounding.medium
+                                onClicked: root.tab = modelData.k
+                            }
+                            Column {
+                                id: _tcol
+                                anchors.centerIn: parent
+                                spacing: 1
+                                MaterialIcon {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    symbol: modelData.ic
+                                    color: parent.parent.current ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                                    fill: parent.parent.current ? 1 : 0
+                                    fontStyle: Tokens.font.icon.small
+                                    Behavior on fill { Anim { type: Anim.DefaultEffects } }
+                                }
+                                StyledText {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: modelData.t
+                                    color: parent.parent.current ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                                    font: Tokens.font.label.small
+                                }
+                            }
                         }
-                        Rectangle {
-                            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                            height: 2; radius: 1; color: Colours.palette.m3primary
-                            visible: root.tab === modelData.k
-                        }
-                        MouseArea { anchors.fill: parent; onClicked: root.tab = modelData.k }
                     }
+                }
+
+                // Animated underline indicator.
+                Item {
+                    width: parent.width; height: 3
+                    Rectangle {
+                        width: parent.width / 2 - Tokens.spacing.large
+                        height: 3; radius: Tokens.rounding.full
+                        color: Colours.palette.m3primary
+                        x: (root.tab === "recentes" ? 0 : parent.width / 2) + Tokens.spacing.large / 2
+                        Behavior on x { Anim {} }
+                    }
+                }
+
+                // Separator.
+                Rectangle {
+                    width: parent.width; height: 1
+                    color: Colours.palette.m3outlineVariant
                 }
             }
 
-            // Empty hint
+            // Loading — the indeterminate M3 bar used across the app (Wi-Fi /
+            // Bluetooth scan), shown while a geocode request is in flight.
+            Column {
+                width: parent.width
+                visible: root._searching && root._items.length === 0
+                spacing: Tokens.spacing.small
+                topPadding: Tokens.spacing.small
+
+                StyledText {
+                    text: "Buscando…"
+                    color: Colours.palette.m3onSurfaceVariant
+                    font: Tokens.font.body.small
+                }
+                StyledProgressBar {
+                    width: parent.width
+                    implicitHeight: Tokens.rounding.extraSmall
+                    indeterminate: true
+                }
+            }
+
+            // Empty hint (not while loading)
             StyledText {
                 width: parent.width
-                visible: root._items.length === 0
-                text: root._typing ? "Buscando…"
+                visible: !root._searching && root._items.length === 0
+                text: root._typing ? "Nenhum resultado."
                     : root.tab === "favoritos" ? "Sem favoritos ainda."
                     : "Sem destinos recentes."
                 color: Colours.palette.m3onSurfaceVariant
@@ -281,72 +358,37 @@ Item {
             // Results / recents / favorites list
             ListView {
                 width: parent.width
-                height: Math.min(contentHeight, Theme.btnMedium * 4)
+                // Capped so the panel still clears the docked keyboard on the
+                // short 600-px screen; the list scrolls for more.
+                height: Math.min(contentHeight, Theme.btnMedium * 3)
                 visible: root._items.length > 0
                 model: root._items
                 clip: true
-                interactive: contentHeight > height
+                interactive: true
+                flickableDirection: Flickable.VerticalFlick
+                boundsBehavior: Flickable.StopAtBounds
                 spacing: 0
 
-                delegate: Item {
+                delegate: ListRow {
                     required property var modelData
                     required property int index
-                    width: ListView.view.width
-                    height: 56
 
                     readonly property bool _isResult: root._typing
                     readonly property var _coord: _isResult ? modelData.coordinate
                         : QtPositioning.coordinate(modelData.lat, modelData.lon)
-                    readonly property string _name: _isResult
-                        ? modelData.address
-                        : (modelData.name && modelData.name.length ? modelData.name : modelData.address)
-                    readonly property string _sub: _isResult ? "" : (modelData.address || "")
 
-                    Rectangle { anchors.fill: parent; radius: Tokens.rounding.small
-                                color: _rowArea.pressed ? Colours.palette.m3surfaceContainerHigh : "transparent" }
+                    icon: root._typing ? "search"
+                        : root.tab === "favoritos" ? "star" : "schedule"
+                    title: _isResult ? modelData.address
+                         : (modelData.name && modelData.name.length ? modelData.name : modelData.address)
+                    subtitle: _isResult ? "" : (modelData.address || "")
+                    onClicked: root._pick(_coord, title, subtitle)
 
-                    // Circular icon badge — same language as the notification
-                    // and POI rows.
-                    Rectangle {
-                        id: _rowIcon
-                        anchors { left: parent.left; leftMargin: Tokens.spacing.extraSmall
-                                  verticalCenter: parent.verticalCenter }
-                        width: 36; height: 36; radius: width / 2
-                        color: Colours.palette.m3secondaryContainer
-                        MaterialIcon {
-                            anchors.centerIn: parent
-                            fontStyle: Tokens.font.icon.small
-                            color: Colours.palette.m3onSecondaryContainer
-                            symbol: root._typing ? "search"
-                                  : root.tab === "favoritos" ? "star"
-                                  : "schedule"
-                        }
-                    }
-                    Column {
-                        anchors {
-                            left: _rowIcon.right; leftMargin: Tokens.spacing.medium
-                            right: _rowDist.left; rightMargin: Tokens.spacing.small
-                            verticalCenter: parent.verticalCenter
-                        }
-                        spacing: 1
-                        StyledText { width: parent.width; text: parent.parent._name
-                               color: Colours.palette.m3onSurface; font: Tokens.font.body.small
-                               elide: Text.ElideRight }
-                        StyledText { width: parent.width; visible: parent.parent._sub !== ""
-                               text: parent.parent._sub
-                               color: Colours.palette.m3onSurfaceVariant; font: Tokens.font.label.small
-                               elide: Text.ElideRight }
-                    }
                     StyledText {
-                        id: _rowDist
-                        anchors { right: parent.right; rightMargin: Tokens.spacing.extraSmall
-                                  verticalCenter: parent.verticalCenter }
                         text: root._distStr(_coord.latitude, _coord.longitude)
-                        color: Colours.palette.m3onSurfaceVariant; font: Tokens.font.label.small
+                        color: Colours.palette.m3onSurfaceVariant
+                        font: Tokens.font.label.small
                     }
-
-                    MouseArea { id: _rowArea; anchors.fill: parent
-                                onClicked: root._pick(parent._coord, parent._name, parent._sub) }
                 }
             }
         }

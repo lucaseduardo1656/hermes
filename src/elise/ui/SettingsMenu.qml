@@ -93,7 +93,7 @@ Menu {
                 anchors.fill: parent
                 anchors.rightMargin: _clearS.visible ? Theme.btnSmall + Theme.spaceS * 2 : 0
                 onClicked: Keyboard.show({
-                    title: "Buscar configuração", bare: false, initial: root._query,
+                    title: "Buscar configuração", bare: true, initial: root._query,
                     onSubmit: function(t) { root._query = t }
                 })
             }

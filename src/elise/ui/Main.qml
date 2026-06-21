@@ -128,7 +128,7 @@ Window {
             height: _previewCol.implicitHeight + Theme.spaceL * 2
             visible: _map && _map.hasDestination && _map.routeDistanceM > 0 && !_map.navStarted
             radius: Theme.radiusL
-            color: Colours.palette.m3surfaceContainer
+            color: Colours.palette.m3surfaceContainerHigh
             border.color: Colours.palette.m3outlineVariant
             border.width: 1
 
@@ -172,48 +172,86 @@ Window {
                     width: parent.width
                     spacing: Theme.spaceS
 
-                    Rectangle {
+                    IconTextButton {
                         width: parent.width - _cancelBtn.width - parent.spacing
-                        height: 48; radius: Theme.radiusM
-                        color: _goArea.pressed ? Colours.palette.m3inversePrimary : Colours.palette.m3primary
-                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
-                        Row {
-                            anchors.centerIn: parent; spacing: Theme.spaceS
-                            MaterialIcon { anchors.verticalCenter: parent.verticalCenter
-                                      fontStyle: Tokens.font.icon.small; color: Colours.palette.m3onPrimary
-                                      symbol: "navigation"; fill: 1 }
-                            StyledText { anchors.verticalCenter: parent.verticalCenter
-                                   text: "Iniciar"; color: Colours.palette.m3onPrimary
-                                   font.pixelSize: Theme.fontBody; font.weight: Font.Bold }
-                        }
-                        MouseArea { id: _goArea; anchors.fill: parent
-                                    onClicked: if (_map) _map.startNavigation() }
+                        height: 48
+                        type: IconTextButton.Filled
+                        icon: "navigation"
+                        iconLabel.fill: 1
+                        text: "Iniciar"
+                        onClicked: if (_map) _map.startNavigation()
                     }
-                    Rectangle {
+                    IconButton {
                         id: _cancelBtn
-                        width: 48; height: 48; radius: Theme.radiusM
-                        color: _cxArea.pressed ? Colours.palette.m3surfaceContainerHigh : "transparent"
-                        border.color: Colours.palette.m3outlineVariant; border.width: 1
-                        MaterialIcon { anchors.centerIn: parent; fontStyle: Tokens.font.icon.small
-                                  color: Colours.palette.m3onSurfaceVariant; symbol: "close" }
-                        MouseArea { id: _cxArea; anchors.fill: parent
-                                    onClicked: if (_map) _map.clearDestination() }
+                        height: 48; width: 48
+                        isRound: true
+                        type: IconButton.Tonal
+                        icon: "close"
+                        onClicked: if (_map) _map.clearDestination()
                     }
                 }
             }
         }
     }
 
-    // ── Weather card (top-right) ──────────────────────────────────────────────
-    // Regional conditions from the Weather controller. Mirrors the top-left
-    // stack; hidden while the player is expanded so it never overlaps.
-    WeatherCard {
+    // ── Top-right status cluster: clock + weather ─────────────────────────────
+    // Hidden while the player is expanded so it never overlaps.
+    Column {
         anchors {
             top:   parent.top;   topMargin:   Theme.spaceL
             right: parent.right; rightMargin: Theme.spaceL
         }
+        spacing: Theme.spaceS
         z: 700
-        visible: Weather.valid && root.playerState !== "expanded" && !root._poiPanelOpen
+        visible: root.playerState !== "expanded" && !root._poiPanelOpen
+
+        // Clock chip — the at-a-glance time + date.
+        Rectangle {
+            anchors.right: parent.right
+            width:  _clockRow.implicitWidth + Theme.spaceL * 2
+            height: 44
+            radius: Tokens.rounding.full
+            color: Colours.palette.m3surfaceContainerHigh
+            border.color: Colours.palette.m3outlineVariant
+            border.width: 1
+
+            property var _now: new Date()
+            Timer {
+                interval: 1000; repeat: true; running: true
+                onTriggered: parent._now = new Date()
+            }
+
+            Row {
+                id: _clockRow
+                anchors.centerIn: parent
+                spacing: Theme.spaceS
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Qt.formatTime(parent.parent._now,
+                            Settings.appearance.timeFormat === "12h" ? "h:mm AP" : "HH:mm")
+                    color: Colours.palette.m3onSurface
+                    font.pixelSize: Theme.fontLarge
+                    font.weight: Font.Bold
+                }
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 1; height: 18
+                    color: Colours.palette.m3outlineVariant
+                }
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Qt.formatDate(parent.parent._now, "ddd dd/MM")
+                    color: Colours.palette.m3onSurfaceVariant
+                    font: Tokens.font.label.small
+                }
+            }
+        }
+
+        WeatherCard {
+            anchors.right: parent.right
+            visible: Weather.valid
+        }
     }
 
     // ── Right-edge FAB stack ──────────────────────────────────────────────────

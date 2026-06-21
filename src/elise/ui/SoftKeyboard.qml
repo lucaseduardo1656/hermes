@@ -73,12 +73,13 @@ Item {
     }
 
     // ── Metrics / palette ───────────────────────────────────────────────
-    // Larger touch targets — in-vehicle touchscreen usability keeps improving
-    // with key size up to ~17.5 mm, so the keys are bigger than a desktop OSK
-    // and the gaps wider to cut mis-taps. Theme-aware (was hardcoded light).
-    readonly property int   _keyW: 66
-    readonly property int   _keyH: 58
-    readonly property int   _gap:  9
+    // Key size is bounded by the 1024-px panel: QWERTY (10 + backspace) plus the
+    // number pad must fit on one row, so ~58 px is the practical max here. Gaps
+    // kept generous to cut mis-taps; theme-aware (was hardcoded light) + a
+    // press-pop on each key for touch feedback.
+    readonly property int   _keyW: 58
+    readonly property int   _keyH: 50
+    readonly property int   _gap:  7
     readonly property color _panelBg: Colours.palette.m3surface
     readonly property color _capDn:   Colours.palette.m3surfaceContainerHigh   // letter press feedback
     readonly property color _pill:    Colours.palette.m3surfaceContainerHighest // special-key fill
@@ -170,7 +171,9 @@ Item {
         id: _card
         visible: !Keyboard.bare
         x: (parent.width - width) / 2
-        y: (parent.height - _tray.height - height) / 2
+        // Sit centred in the space above the tray, but never clip off the top
+        // on the short 600-px panel.
+        y: Math.max(Theme.spaceM, (parent.height - _tray.height - height) / 2)
         width:  Math.min(parent.width - Theme.spaceXXL * 2, 400)
         height: _cardCol.implicitHeight + Tokens.padding.extraLarge * 2
         radius: Tokens.rounding.large

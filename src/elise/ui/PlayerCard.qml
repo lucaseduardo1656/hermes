@@ -521,11 +521,27 @@ Item {
                         }
                     }
 
+                    // Live-mirror the keyboard buffer into the visible field while
+                    // this search is being typed (bare keyboard — no modal card).
+                    Connections {
+                        target: Keyboard
+                        function onBufferChanged() {
+                            if (!(Keyboard.active && Keyboard.title === "Buscar música")) return
+                            const q = Keyboard.buffer
+                            _expandedView.lastQuery = q
+                            if (q.trim() === "")
+                                _expandedView.searchResults = []
+                            else
+                                Player.search(q, _expandedView.activeTab === "USB" ? "local" : "all")
+                        }
+                    }
+
                     MouseArea {
                         id: _searchArea
                         anchors.fill: parent
                         onClicked: Keyboard.show({
                             title:    "Buscar música",
+                            bare:     true,
                             initial:  _expandedView.lastQuery,
                             onSubmit: function(q) {
                                 _expandedView.lastQuery = q
