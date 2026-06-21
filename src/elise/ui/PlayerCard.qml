@@ -202,8 +202,11 @@ Item {
                     source: Player.playing ? "qrc:/icons/pause.svg" : "qrc:/icons/play.svg"
                     color:  Colours.palette.m3onPrimary
                     size:   Theme.iconS
+                    z: 1
                 }
-                MouseArea { id: _playArea; anchors.fill: parent; onClicked: Player.togglePlay() }
+                StateLayer { id: _playArea; radius: Theme.radiusS
+                             color: Colours.palette.m3onPrimary
+                             onClicked: Player.togglePlay() }
             }
 
             IconBtn {
@@ -377,8 +380,11 @@ Item {
                             source: Player.playing ? "qrc:/icons/pause.svg" : "qrc:/icons/play.svg"
                             color:  Colours.palette.m3onPrimary
                             size:   Theme.iconS
+                            z: 1
                         }
-                        MouseArea { id: _expPlay; anchors.fill: parent; onClicked: Player.togglePlay() }
+                        StateLayer { id: _expPlay; radius: Theme.radiusS
+                                     color: Colours.palette.m3onPrimary
+                                     onClicked: Player.togglePlay() }
                     }
 
                     IconBtn {
@@ -727,6 +733,7 @@ Item {
 
     // Square tappable icon button with subtle pressed-state background.
     component IconBtn: Item {
+        id: _iconBtn
         property url   icon
         property real  size:  Theme.iconM
         property color color: Colours.palette.m3onSurfaceVariant
@@ -735,19 +742,17 @@ Item {
         width:  Theme.btnMedium
         height: Theme.btnMedium
 
-        Rectangle {
-            anchors.fill: parent
+        // M3 ripple press feedback (same as the rest of the app).
+        StateLayer {
             radius: Theme.radiusM
-            color:  _ia.pressed ? System.pressOverlay : "transparent"
-            Behavior on color { ColorAnimation { duration: Theme.durFast } }
+            onClicked: _iconBtn.tapped()
         }
         SvgIcon {
             anchors.centerIn: parent
-            source: parent.icon
-            color:  parent.color
-            size:   parent.size
+            source: _iconBtn.icon
+            color:  _iconBtn.color
+            size:   _iconBtn.size
         }
-        MouseArea { id: _ia; anchors.fill: parent; onClicked: parent.tapped() }
     }
 
 }

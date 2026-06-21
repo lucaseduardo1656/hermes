@@ -44,10 +44,14 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: Theme.radiusM
-                    color:  _tap.pressed ? System.pressOverlay
-                          : isCurrent     ? Colours.palette.m3surfaceContainerHigh
-                          : "transparent"
+                    color:  isCurrent ? Colours.palette.m3surfaceContainerHigh : "transparent"
                     Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                }
+
+                // M3 ripple press feedback.
+                StateLayer {
+                    radius: Theme.radiusM
+                    onClicked: root.trackTapped(index)
                 }
 
                 Row {
@@ -62,13 +66,27 @@ Item {
                         width:  48; height: 48; radius: Theme.radiusS
                         color:  Colours.palette.m3surfaceContainerHigh
                         anchors.verticalCenter: parent.verticalCenter
+                        clip: true
 
                         Image {
+                            id: _art
                             anchors.fill: parent
                             source:   modelData.artwork || ""
                             fillMode: Image.PreserveAspectCrop
-                            visible:  (modelData.artwork || "") !== ""
+                            visible:  (modelData.artwork || "") !== "" && status === Image.Ready
                             asynchronous: true
+                        }
+                        // Loading shimmer while the cover decodes.
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: _art.status === Image.Loading
+                            color: Colours.palette.m3surfaceContainerHighest
+                            SequentialAnimation on opacity {
+                                running: _art.status === Image.Loading
+                                loops: Animation.Infinite
+                                NumberAnimation { from: 0.4; to: 1; duration: 700 }
+                                NumberAnimation { from: 1; to: 0.4; duration: 700 }
+                            }
                         }
                         SvgIcon {
                             anchors.centerIn: parent
@@ -113,11 +131,6 @@ Item {
                     font.pixelSize: Theme.fontCaption
                 }
 
-                MouseArea {
-                    id: _tap
-                    anchors.fill: parent
-                    onClicked: root.trackTapped(index)
-                }
             }
         }
     }

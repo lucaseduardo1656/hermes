@@ -1329,6 +1329,73 @@ Item {
                 width: parent.width
                 spacing: Theme.spaceL
 
+                // Hero — the place photo when available, otherwise a category-
+                // coloured banner with the category glyph. Hook for the richer
+                // place data (photos) coming later.
+                Rectangle {
+                    width: parent.width
+                    height: 150
+                    radius: Theme.radiusM
+                    clip: true
+                    color: _poiCard.catColor
+
+                    Image {
+                        id: _heroImg
+                        anchors.fill: parent
+                        source: _poiCard.poi.photo || ""
+                        fillMode: Image.PreserveAspectCrop
+                        visible: (_poiCard.poi.photo || "") !== "" && status === Image.Ready
+                        asynchronous: true
+                    }
+                    // Loading shimmer while a photo decodes.
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: _heroImg.status === Image.Loading
+                        color: Colours.palette.m3surfaceContainerHighest
+                        SequentialAnimation on opacity {
+                            running: _heroImg.status === Image.Loading
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 0.4; to: 1; duration: 700 }
+                            NumberAnimation { from: 1; to: 0.4; duration: 700 }
+                        }
+                    }
+                    SvgIcon {
+                        anchors.centerIn: parent
+                        source: root._poiIcon(_poiCard.poi.category)
+                        color: "#ffffff"; size: 52
+                        visible: (_poiCard.poi.photo || "") === ""
+                        opacity: 0.9
+                    }
+                }
+
+                // Rating row — shown when the place carries a rating (future
+                // data); a row of stars + the numeric score + review count.
+                Row {
+                    spacing: Theme.spaceS
+                    visible: (_poiCard.poi.rating || 0) > 0
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 1
+                        Repeater {
+                            model: 5
+                            MaterialIcon {
+                                required property int index
+                                symbol: index < Math.round(_poiCard.poi.rating || 0) ? "star" : "star_outline"
+                                color: Colours.palette.m3primary
+                                fontStyle: Tokens.font.icon.small
+                                fill: 1
+                            }
+                        }
+                    }
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: ("" + (_poiCard.poi.rating || 0))
+                              + (_poiCard.poi.reviews ? "  ·  " + _poiCard.poi.reviews + " avaliações" : "")
+                        color: Colours.palette.m3onSurfaceVariant
+                        font: Tokens.font.body.small
+                    }
+                }
+
                 // Header: name + close. Name elides to two lines (Tesla-style);
                 // anchored to the top so a long title never overflows upward and
                 // hides behind the panel edge.
