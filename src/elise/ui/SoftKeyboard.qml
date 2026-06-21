@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import Elise
 
 // Global on-screen keyboard, Tesla Model 3/Y style. Driven by the
@@ -72,16 +73,19 @@ Item {
     }
 
     // ── Metrics / palette ───────────────────────────────────────────────
-    readonly property int   _keyW: 58
-    readonly property int   _keyH: 52
-    readonly property int   _gap:  8
-    readonly property color _panelBg: "#ECECE8"
-    readonly property color _capDn:   "#DCDCD8"   // letter press feedback
-    readonly property color _pill:    "#D7D7D2"   // special-key fill
-    readonly property color _pillDn:  "#C2C2BD"
-    readonly property color _txt:     "#1A1A1A"
-    readonly property color _txtMute: "#9A9A95"
-    readonly property color _accent:  System.accent
+    // Larger touch targets — in-vehicle touchscreen usability keeps improving
+    // with key size up to ~17.5 mm, so the keys are bigger than a desktop OSK
+    // and the gaps wider to cut mis-taps. Theme-aware (was hardcoded light).
+    readonly property int   _keyW: 66
+    readonly property int   _keyH: 58
+    readonly property int   _gap:  9
+    readonly property color _panelBg: Colours.palette.m3surface
+    readonly property color _capDn:   Colours.palette.m3surfaceContainerHigh   // letter press feedback
+    readonly property color _pill:    Colours.palette.m3surfaceContainerHighest // special-key fill
+    readonly property color _pillDn:  Colours.palette.m3surfaceContainerHigh
+    readonly property color _txt:     Colours.palette.m3onSurface
+    readonly property color _txtMute: Colours.palette.m3outline
+    readonly property color _accent:  Colours.palette.m3primary
 
     // One key. Flat (text only) by default; `pill` gives the gray fill used
     // by action keys; `active` highlights toggles (⇧, ?#&).
@@ -100,12 +104,18 @@ Item {
 
         width:  cells * root._keyW + (cells - 1) * root._gap
         height: root._keyH
-        radius: 11
+        radius: Tokens.rounding.medium
         // No color animation — a fade on quick taps reads as flicker.
         color: active ? root._accent
              : !pill   ? (_a.pressed ? root._capDn : "transparent")
              :           (_a.pressed ? root._pillDn : root._pill)
         opacity: enabledKey ? 1 : 0.3
+
+        // Press-pop feedback — the key briefly grows on touch (clear tactile
+        // cue on a small touchscreen).
+        scale: _a.pressed ? 1.12 : 1
+        z: _a.pressed ? 2 : 0
+        Behavior on scale { Anim { type: Anim.FastSpatial } }
 
         // Long-press affordance dot for keys with accent variants.
         Rectangle {
@@ -119,7 +129,7 @@ Item {
             anchors.centerIn: parent
             visible: key.icon === ""
             text: key.label
-            color: key.active ? "#000000" : root._txt
+            color: key.active ? Colours.palette.m3onPrimary : root._txt
             font.pixelSize: key.fontPx
             font.weight: Font.Medium
         }
@@ -155,54 +165,89 @@ Item {
         MouseArea { anchors.fill: parent; onClicked: Keyboard.dismiss() }
     }
 
-    // ── Floating input card (non-bare) ──────────────────────────────────
+    // ── Floating input card (non-bare) — Caelestia dialog style ─────────
     Rectangle {
         id: _card
         visible: !Keyboard.bare
         x: (parent.width - width) / 2
         y: (parent.height - _tray.height - height) / 2
-        width:  Math.min(parent.width - Theme.spaceXXL * 2, 520)
-        height: _cardCol.implicitHeight + Theme.spaceL * 2
-        radius: Theme.radiusL
-        color:  System.surface
-        border.color: System.border
-        border.width: Theme.borderHairline
+        width:  Math.min(parent.width - Theme.spaceXXL * 2, 400)
+        height: _cardCol.implicitHeight + Tokens.padding.extraLarge * 2
+        radius: Tokens.rounding.large
+        color:  Colours.palette.m3surfaceContainer
+        border.color: Colours.palette.m3outlineVariant
+        border.width: 1
+
+        scale: Keyboard.active ? 1 : 0.7
+        opacity: Keyboard.active ? 1 : 0
+        Behavior on scale   { Anim {} }
+        Behavior on opacity { Anim { type: Anim.DefaultEffects } }
 
         MouseArea { anchors.fill: parent; onClicked: {} }
 
         Column {
             id: _cardCol
             anchors {
-                left: parent.left; right: parent.right; top: parent.top
-                leftMargin: Theme.spaceL; rightMargin: Theme.spaceL; topMargin: Theme.spaceL
+                left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
+                leftMargin: Tokens.padding.large; rightMargin: Tokens.padding.large
             }
-            spacing: Theme.spaceM
+            spacing: Tokens.spacing.medium
 
-            Text {
-                width: parent.width
+            // Lock glyph (password prompts).
+            MaterialIcon {
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: Keyboard.password
+                symbol: "lock"
+                fontStyle: Tokens.font.icon.size(44)
+                color: Colours.palette.m3onSurface
+            }
+
+            StyledText {
+                anchors.horizontalCenter: parent.horizontalCenter
                 visible: Keyboard.title !== ""
                 text:  Keyboard.title
-                color: System.textPrimary
-                font.pixelSize: Theme.fontTitle; font.weight: Font.Medium
-                elide: Text.ElideRight
+                color: Colours.palette.m3onSurface
+                font.pointSize: Tokens.font.body.large.pointSize
+                font.weight: Font.Medium
             }
 
+            StyledText {
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: Keyboard.subtitle !== ""
+                text:  Keyboard.subtitle
+                color: Colours.palette.m3outline
+                font: Tokens.font.body.small
+            }
+
+            // Input field — focus-style border, masked dots, reveal toggle.
             Rectangle {
-                width: parent.width; height: 44
-                color: System.surface2; radius: Theme.radiusM
-                border.color: System.accent; border.width: Theme.borderHairline
+                width: parent.width; height: 52
+                anchors.topMargin: Tokens.spacing.large
+                radius: Tokens.rounding.large
+                color: Colours.palette.m3surfaceContainerHigh
+                border.color: Colours.palette.m3primary
+                border.width: 2
 
                 Item {
                     anchors {
-                        left: parent.left; leftMargin: Theme.spaceM
-                        right: _eye.left;  rightMargin: Theme.spaceM
+                        left: parent.left; leftMargin: Tokens.padding.large
+                        right: _eye.left;  rightMargin: Tokens.spacing.small
                         verticalCenter: parent.verticalCenter
                     }
                     height: Theme.fontTitle + 4
                     clip: true
 
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: Keyboard.buffer === ""
+                        text: Keyboard.password ? "Senha" : "Texto"
+                        color: Colours.palette.m3outline
+                        font.pointSize: Tokens.font.body.large.pointSize
+                    }
+
                     Row {
                         anchors.verticalCenter: parent.verticalCenter
+                        visible: Keyboard.buffer !== ""
                         readonly property bool _masked: Keyboard.password && !root._revealPwd
                         readonly property string _pre: _masked
                             ? "•".repeat(Keyboard.cursorPos)
@@ -211,13 +256,13 @@ Item {
                             ? "•".repeat(Keyboard.buffer.length - Keyboard.cursorPos)
                             : Keyboard.buffer.slice(Keyboard.cursorPos)
 
-                        Text {
-                            text: parent._pre; color: System.textPrimary
-                            font.pixelSize: Theme.fontTitle
+                        StyledText {
+                            text: parent._pre; color: Colours.palette.m3onSurface
+                            font.pointSize: Tokens.font.body.large.pointSize
                             anchors.verticalCenter: parent.verticalCenter
                         }
                         Rectangle {
-                            width: 2; height: Theme.fontTitle + 2; color: System.accent
+                            width: 2; height: Theme.fontTitle + 2; color: Colours.palette.m3primary
                             anchors.verticalCenter: parent.verticalCenter
                             SequentialAnimation on opacity {
                                 loops: Animation.Infinite; running: Keyboard.active
@@ -227,52 +272,47 @@ Item {
                                 NumberAnimation { to: 1; duration: 0 }
                             }
                         }
-                        Text {
-                            text: parent._post; color: System.textPrimary
-                            font.pixelSize: Theme.fontTitle
+                        StyledText {
+                            text: parent._post; color: Colours.palette.m3onSurface
+                            font.pointSize: Tokens.font.body.large.pointSize
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
                 }
 
-                Rectangle {
+                IconButton {
                     id: _eye
-                    anchors { right: parent.right; rightMargin: Theme.spaceXS
+                    anchors { right: parent.right; rightMargin: Tokens.spacing.extraSmall
                               verticalCenter: parent.verticalCenter }
-                    width: 36; height: 36; radius: width / 2
-                    color: _eyeArea.pressed ? System.pressOverlay : "transparent"
                     visible: Keyboard.password
-                    SvgIcon {
-                        anchors.centerIn: parent
-                        source: root._revealPwd ? "qrc:/icons/eye-off.svg" : "qrc:/icons/eye.svg"
-                        color: System.textMuted; size: Theme.iconM
-                    }
-                    MouseArea { id: _eyeArea; anchors.fill: parent
-                                onClicked: root._revealPwd = !root._revealPwd }
+                    isRound: true
+                    type: IconButton.Text
+                    icon: root._revealPwd ? "visibility_off" : "visibility"
+                    onClicked: root._revealPwd = !root._revealPwd
                 }
             }
 
-            Row {
-                anchors.right: parent.right
-                spacing: Theme.spaceM
+            RowLayout {
+                width: parent.width
+                anchors.topMargin: Tokens.spacing.small
+                spacing: Tokens.spacing.medium
 
-                Rectangle {
-                    width: 110; height: 40; radius: Theme.radiusM
-                    color: _cancelArea.pressed ? System.pressOverlay : "transparent"
-                    border.color: System.border; border.width: Theme.borderHairline
-                    Text { anchors.centerIn: parent; text: "Cancelar"
-                           color: System.textPrimary; font.pixelSize: Theme.fontMedium }
-                    MouseArea { id: _cancelArea; anchors.fill: parent
-                                onClicked: Keyboard.dismiss() }
+                TextButton {
+                    Layout.fillWidth: true
+                    Layout.minimumHeight: 48
+                    type: TextButton.Tonal
+                    inactiveColour: Colours.palette.m3secondaryContainer
+                    inactiveOnColour: Colours.palette.m3onSecondaryContainer
+                    text: "Cancelar"
+                    onClicked: Keyboard.dismiss()
                 }
-                Rectangle {
-                    width: 110; height: 40; radius: Theme.radiusM
-                    color: _okArea.pressed ? Qt.darker(System.accent, 1.2) : System.accent
-                    Text { anchors.centerIn: parent; text: "Confirmar"
-                           color: System.background; font.pixelSize: Theme.fontMedium
-                           font.weight: Font.Medium }
-                    MouseArea { id: _okArea; anchors.fill: parent
-                                onClicked: Keyboard.submit() }
+                TextButton {
+                    Layout.fillWidth: true
+                    Layout.minimumHeight: 48
+                    type: TextButton.Filled
+                    text: Keyboard.password ? "Conectar" : "Confirmar"
+                    enabled: !Keyboard.password || Keyboard.buffer.length > 0
+                    onClicked: Keyboard.submit()
                 }
             }
         }

@@ -18,6 +18,7 @@ QtObject {
 
     property bool   active:    false
     property string title:     ""
+    property string subtitle:  ""      // e.g. the network name under the title
     property string buffer:    ""
     property int    cursorPos: 0
     property bool   password:  false
@@ -32,6 +33,7 @@ QtObject {
 
     function show(opts) {
         title     = opts.title    || ""
+        subtitle  = opts.subtitle || ""
         password  = opts.password === true
         bare      = opts.bare === true
         buffer    = opts.initial  || ""
@@ -71,6 +73,7 @@ QtObject {
         buffer    = ""
         cursorPos = 0
         title     = ""
+        subtitle  = ""
         password  = false
         bare      = false
         _onSubmit = null

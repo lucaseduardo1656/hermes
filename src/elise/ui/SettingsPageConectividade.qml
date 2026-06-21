@@ -23,7 +23,7 @@ VerticalFadeFlickable {
         if (!_isSecure(n))         { Settings.network.connectOpen(n.ssid);    return }
         const ssid = n.ssid
         Keyboard.show({
-            title: "Senha de " + ssid, password: true,
+            title: "Digite a senha", subtitle: "Rede: " + ssid, password: true,
             onSubmit: function(psk) { Settings.network.connectWithPassphrase(ssid, psk) }
         })
     }
