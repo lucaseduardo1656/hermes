@@ -302,17 +302,25 @@ Item {
                         : (modelData.name && modelData.name.length ? modelData.name : modelData.address)
                     readonly property string _sub: _isResult ? "" : (modelData.address || "")
 
-                    Rectangle { anchors.fill: parent
+                    Rectangle { anchors.fill: parent; radius: Tokens.rounding.small
                                 color: _rowArea.pressed ? Colours.palette.m3surfaceContainerHigh : "transparent" }
 
-                    MaterialIcon {
+                    // Circular icon badge — same language as the notification
+                    // and POI rows.
+                    Rectangle {
                         id: _rowIcon
-                        anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                        fontStyle: Tokens.font.icon.medium
-                        color: Colours.palette.m3onSurfaceVariant
-                        symbol: root._typing ? "search"
-                              : root.tab === "favoritos" ? "star"
-                              : "schedule"
+                        anchors { left: parent.left; leftMargin: Tokens.spacing.extraSmall
+                                  verticalCenter: parent.verticalCenter }
+                        width: 36; height: 36; radius: width / 2
+                        color: Colours.palette.m3secondaryContainer
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            fontStyle: Tokens.font.icon.small
+                            color: Colours.palette.m3onSecondaryContainer
+                            symbol: root._typing ? "search"
+                                  : root.tab === "favoritos" ? "star"
+                                  : "schedule"
+                        }
                     }
                     Column {
                         anchors {
@@ -331,13 +339,11 @@ Item {
                     }
                     StyledText {
                         id: _rowDist
-                        anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                        anchors { right: parent.right; rightMargin: Tokens.spacing.extraSmall
+                                  verticalCenter: parent.verticalCenter }
                         text: root._distStr(_coord.latitude, _coord.longitude)
                         color: Colours.palette.m3onSurfaceVariant; font: Tokens.font.label.small
                     }
-                    Rectangle { visible: index < root._items.length - 1
-                                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                                height: 1; color: Colours.palette.m3outlineVariant }
 
                     MouseArea { id: _rowArea; anchors.fill: parent
                                 onClicked: root._pick(parent._coord, parent._name, parent._sub) }

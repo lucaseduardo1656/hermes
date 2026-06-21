@@ -1291,7 +1291,7 @@ Item {
         color: Colours.palette.m3surfaceContainer
         border.color: Colours.palette.m3outlineVariant; border.width: 1
         opacity: visible ? 1 : 0
-        Behavior on opacity { NumberAnimation { duration: 140 } }
+        Behavior on opacity { Anim { type: Anim.DefaultEffects } }
 
         readonly property var  poi: root._selectedPoi || ({})
         readonly property color catColor: root._poiColor(poi.category)
@@ -1306,9 +1306,9 @@ Item {
         onPoiChanged: fav = root._selectedPoi
                         ? RoadInfo.isFavorite(poi.lat, poi.lon) : false
 
-        // slide-in from the left
+        // slide-in from the left (emphasized motion, matching the toasts)
         transform: Translate { x: _poiCard.visible ? 0 : -40
-            Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } } }
+            Behavior on x { Anim { easing: Tokens.anim.emphasizedDecel } } }
 
         Flickable {
             anchors.fill: parent
@@ -1325,28 +1325,24 @@ Item {
                 // Header: name + close
                 Item {
                     width: parent.width
-                    height: Math.max(_poiName.height, 30)
-                    Text {
+                    height: Math.max(_poiName.height, _panelClose.height)
+                    StyledText {
                         id: _poiName
                         anchors { left: parent.left; right: _panelClose.left
-                                  rightMargin: Theme.spaceS; top: parent.top }
+                                  rightMargin: Theme.spaceS; verticalCenter: _panelClose.verticalCenter }
                         text: _poiCard.poi.name && _poiCard.poi.name.length
                                 ? _poiCard.poi.name : root._poiCatLabel(_poiCard.poi.category)
                         color: Colours.palette.m3onSurface
-                        font.pixelSize: 22; font.weight: Font.Bold
+                        font: Tokens.font.title.large
                         wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight
                     }
-                    Rectangle {
+                    IconButton {
                         id: _panelClose
-                        width: 30; height: 30; radius: 15
                         anchors { right: parent.right; top: parent.top }
-                        color: _pcArea.pressed ? Colours.palette.m3surfaceContainerHigh : "transparent"
-                        MaterialIcon {
-                            anchors.centerIn: parent; fontStyle: Tokens.font.icon.small
-                            color: Colours.palette.m3onSurfaceVariant; symbol: "close"
-                        }
-                        MouseArea { id: _pcArea; anchors.fill: parent
-                                    onClicked: root._selectedPoi = null }
+                        isRound: true
+                        type: IconButton.Text
+                        icon: "close"
+                        onClicked: root._selectedPoi = null
                     }
                 }
 
@@ -1358,85 +1354,53 @@ Item {
                         size: 16; color: _poiCard.catColor
                         source: root._poiIcon(_poiCard.poi.category)
                     }
-                    Text {
+                    StyledText {
                         anchors.verticalCenter: parent.verticalCenter
                         text: root._poiLabel(_poiCard.poi)
                               + (_poiCard.distStr ? "   ·   " + _poiCard.distStr : "")
-                        color: Colours.palette.m3onSurfaceVariant; font.pixelSize: 14
+                        color: Colours.palette.m3onSurfaceVariant
+                        font: Tokens.font.body.small
                     }
                 }
 
-                // ── Action button row (navigate · call · site · save) ────────
-                Row {
-                    id: _actRow
+                // ── Actions — a prominent "Navegar" + round quick actions, all
+                //    real ButtonBase components (ripple + radius morph). ────────
+                RowLayout {
                     width: parent.width
                     spacing: Theme.spaceS
-                    readonly property real btnW: (width - 3 * spacing) / 4
 
-                    component ActionBtn: Rectangle {
-                        id: _ab
-                        property string icon
-                        property string label
-                        property bool primary: false
-                        property bool enabledAct: true
-                        property bool active: false
-                        signal act()
-                        width: _actRow.btnW; height: 64; radius: Theme.radiusM
-                        color: _ab.primary ? (_aArea.pressed ? Colours.palette.m3inversePrimary : Colours.palette.m3primary)
-                                           : (_ab.active ? Qt.rgba(Colours.palette.m3primary.r, Colours.palette.m3primary.g, Colours.palette.m3primary.b, 0.18)
-                                                         : (_aArea.pressed ? Colours.palette.m3outlineVariant : "transparent"))
-                        border.color: _ab.primary ? "transparent"
-                                                  : (_ab.active ? Colours.palette.m3primary : Colours.palette.m3outlineVariant)
-                        border.width: _ab.primary ? 0 : 1
-                        opacity: _ab.enabledAct ? 1 : 0.35
-                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
-                        Column {
-                            anchors.centerIn: parent; spacing: 4
-                            MaterialIcon {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                fontStyle: Tokens.font.icon.medium
-                                fill: _ab.primary || _ab.active ? 1 : 0
-                                color: _ab.primary ? Colours.palette.m3onPrimary
-                                                   : (_ab.active ? Colours.palette.m3primary : Colours.palette.m3onSurface)
-                                symbol: _ab.icon
-                            }
-                            StyledText {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: _ab.label
-                                color: _ab.primary ? Colours.palette.m3onPrimary
-                                                   : (_ab.active ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant)
-                                font.pixelSize: 11; font.weight: Font.Medium
-                            }
-                        }
-                        MouseArea {
-                            id: _aArea; anchors.fill: parent
-                            enabled: _ab.enabledAct
-                            onClicked: _ab.act()
-                        }
-                    }
-
-                    ActionBtn {
-                        icon: "navigation"; label: "Navegar"
-                        primary: true
-                        onAct: {
+                    IconTextButton {
+                        Layout.fillWidth: true
+                        type: IconTextButton.Filled
+                        icon: "navigation"
+                        text: "Navegar"
+                        iconLabel.fill: 1
+                        onClicked: {
                             root.setDestination(
                                 QtPositioning.coordinate(_poiCard.poi.lat, _poiCard.poi.lon),
                                 _poiCard.poi.name || root._poiCatLabel(_poiCard.poi.category))
                             root._selectedPoi = null
                         }
                     }
-                    ActionBtn {
-                        icon: "call"; label: "Ligar"
-                        enabledAct: _poiCard.hasPhone
+                    IconButton {
+                        isRound: true
+                        type: IconButton.Tonal
+                        icon: "call"
+                        disabled: !_poiCard.hasPhone
                     }
-                    ActionBtn {
-                        icon: "language"; label: "Site"
-                        enabledAct: _poiCard.hasWeb
+                    IconButton {
+                        isRound: true
+                        type: IconButton.Tonal
+                        icon: "language"
+                        disabled: !_poiCard.hasWeb
                     }
-                    ActionBtn {
-                        icon: "star"; label: "Salvar"
-                        active: _poiCard.fav
-                        onAct: {
+                    IconButton {
+                        isRound: true
+                        isToggle: true
+                        type: IconButton.Tonal
+                        icon: "star"
+                        checked: _poiCard.fav
+                        onClicked: {
                             RoadInfo.toggleFavorite(_poiCard.poi.lat, _poiCard.poi.lon,
                                 _poiCard.poi.name || root._poiCatLabel(_poiCard.poi.category))
                             _poiCard.fav = !_poiCard.fav
@@ -1453,14 +1417,15 @@ Item {
                     width: parent.width
                     visible: _poiCard.hasAddr
                     spacing: Theme.spaceM
-                    SvgIcon {
-                        size: 18; color: Colours.palette.m3onSurfaceVariant
-                        source: "qrc:/icons/place.svg"
+                    MaterialIcon {
+                        symbol: "location_on"; fontStyle: Tokens.font.icon.small
+                        color: Colours.palette.m3onSurfaceVariant
                     }
-                    Text {
-                        width: parent.width - 18 - Theme.spaceM
+                    StyledText {
+                        width: parent.width - Theme.iconS - Theme.spaceM
                         text: "" + (_poiCard.poi.address || "")
-                        color: Colours.palette.m3onSurface; font.pixelSize: 14
+                        color: Colours.palette.m3onSurface
+                        font: Tokens.font.body.small
                         wrapMode: Text.WordWrap; elide: Text.ElideRight; maximumLineCount: 3
                     }
                 }
@@ -1470,13 +1435,14 @@ Item {
                     width: parent.width
                     visible: _poiCard.hasPhone
                     spacing: Theme.spaceM
-                    SvgIcon {
-                        size: 18; color: Colours.palette.m3onSurfaceVariant
-                        source: "qrc:/icons/phone.svg"
+                    MaterialIcon {
+                        symbol: "call"; fontStyle: Tokens.font.icon.small
+                        color: Colours.palette.m3onSurfaceVariant
                     }
-                    Text {
+                    StyledText {
                         text: "" + (_poiCard.poi.phone || "")
-                        color: Colours.palette.m3onSurface; font.pixelSize: 14
+                        color: Colours.palette.m3onSurface
+                        font: Tokens.font.body.small
                     }
                 }
             }
