@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
+import QtQuick.Layouts
 import QtLocation
 import QtPositioning
 import Elise
