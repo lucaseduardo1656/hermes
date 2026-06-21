@@ -97,7 +97,7 @@ Item {
     Rectangle {
         id: cardBg
         anchors.fill: parent
-        color: System.surface
+        color: Colours.palette.m3surfaceContainer
 
         // Top corners only — when expanded, the card is edge-to-edge so corners square off.
         topLeftRadius:  playerState === "expanded" ? 0 : Theme.radiusXL
@@ -112,7 +112,7 @@ Item {
             width:  Theme.dragPillW
             height: Theme.dragPillH
             radius: Theme.dragPillR
-            color:  System.border
+            color:  Colours.palette.m3outlineVariant
             opacity: root.playerState !== "expanded" ? 1.0 : 0.0
             Behavior on opacity { NumberAnimation { duration: Theme.durFast } }
         }
@@ -149,7 +149,7 @@ Item {
                 height: Theme.playerCollapsedArt
                 radius: Theme.radiusS
                 anchors.verticalCenter: parent.verticalCenter
-                color:  System.surface2
+                color:  Colours.palette.m3surfaceContainerHigh
                 layer.enabled: true
 
                 Image {
@@ -161,7 +161,7 @@ Item {
                 SvgIcon {
                     anchors.centerIn: parent
                     source: "qrc:/icons/music-note.svg"
-                    color:  System.textMuted
+                    color:  Colours.palette.m3outline
                     size:   Theme.iconS
                     visible: Player.trackArtwork === ""
                 }
@@ -171,7 +171,7 @@ Item {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text:  Player.trackTitle || "—"
-                color: System.textPrimary
+                color: Colours.palette.m3onSurface
                 font.pixelSize: Theme.fontBody
                 font.weight:    Font.Medium
                 elide:          Text.ElideRight
@@ -194,13 +194,13 @@ Item {
                 width:  Theme.btnSmall
                 height: Theme.btnSmall
                 radius: Theme.radiusS
-                color: _playArea.pressed ? System.accentDim : System.accent
+                color: _playArea.pressed ? Colours.palette.m3inversePrimary : Colours.palette.m3primary
                 Behavior on color { ColorAnimation { duration: Theme.durFast } }
 
                 SvgIcon {
                     anchors.centerIn: parent
                     source: Player.playing ? "qrc:/icons/pause.svg" : "qrc:/icons/play.svg"
-                    color:  "#000000"
+                    color:  Colours.palette.m3onPrimary
                     size:   Theme.iconS
                 }
                 MouseArea { id: _playArea; anchors.fill: parent; onClicked: Player.togglePlay() }
@@ -333,7 +333,7 @@ Item {
                     width:  Theme.playerExpandedArt
                     height: Theme.playerExpandedArt
                     radius: Theme.radiusL
-                    color:  System.surface2
+                    color:  Colours.palette.m3surfaceContainerHigh
                     layer.enabled: true
 
                     Image {
@@ -345,7 +345,7 @@ Item {
                     SvgIcon {
                         anchors.centerIn: parent
                         source: "qrc:/icons/music-note.svg"
-                        color:  System.textMuted
+                        color:  Colours.palette.m3outline
                         size:   Theme.iconXL
                         visible: Player.trackArtwork === ""
                     }
@@ -369,13 +369,13 @@ Item {
                         width:  Theme.btnSmall
                         height: Theme.btnSmall
                         radius: Theme.radiusS
-                        color:  _expPlay.pressed ? System.accentDim : System.accent
+                        color:  _expPlay.pressed ? Colours.palette.m3inversePrimary : Colours.palette.m3primary
                         Behavior on color { ColorAnimation { duration: Theme.durFast } }
 
                         SvgIcon {
                             anchors.centerIn: parent
                             source: Player.playing ? "qrc:/icons/pause.svg" : "qrc:/icons/play.svg"
-                            color:  "#000000"
+                            color:  Colours.palette.m3onPrimary
                             size:   Theme.iconS
                         }
                         MouseArea { id: _expPlay; anchors.fill: parent; onClicked: Player.togglePlay() }
@@ -389,7 +389,7 @@ Item {
                     IconBtn {
                         icon:  "qrc:/icons/heart.svg"
                         size:  Theme.iconS
-                        color: Player.liked ? System.accent : System.textSecondary
+                        color: Player.liked ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
                         onTapped: Player.toggleFavorite()
                     }
                     // Manual refresh — re-fetches the home feed from the
@@ -422,20 +422,20 @@ Item {
 
                     Text {
                         text:  Player.trackTitle || "—"
-                        color: System.textPrimary
+                        color: Colours.palette.m3onSurface
                         font.pixelSize: Theme.fontDisplay
                         font.weight:    Font.Medium
                         elide: Text.ElideRight; width: parent.width
                     }
                     Text {
                         text:  Player.trackArtist || ""
-                        color: System.textSecondary
+                        color: Colours.palette.m3onSurfaceVariant
                         font.pixelSize: Theme.fontBody
                         elide: Text.ElideRight; width: parent.width
                     }
                     Text {
                         text:  Player.trackAlbum || ""
-                        color: System.textMuted
+                        color: Colours.palette.m3outline
                         font.pixelSize: Theme.fontCaption
                         elide: Text.ElideRight; width: parent.width
                         visible: Player.trackAlbum !== ""
@@ -453,7 +453,7 @@ Item {
                                 const rem = Math.max(0, (Player.durationMs || 0) - (Player.positionMs || 0))
                                 return rem > 0 ? "-" + _formatMs(rem) : ""
                             }
-                            color: System.textMuted
+                            color: Colours.palette.m3outline
                             font.pixelSize: Theme.fontCaption
                         }
                         Rectangle {
@@ -464,13 +464,13 @@ Item {
                             }
                             height: Theme.progressBarH
                             radius: Theme.progressBarR
-                            color:  System.surface2
+                            color:  Colours.palette.m3surfaceContainerHigh
 
                             Rectangle {
                                 width:  parent.width * Player.progress
                                 height: parent.height
                                 radius: parent.radius
-                                color:  System.accent
+                                color:  Colours.palette.m3primary
                                 Behavior on width { NumberAnimation { duration: Theme.progressTickMs } }
                             }
                             // Larger hit area than visual bar
@@ -498,7 +498,7 @@ Item {
                     height: Theme.btnMedium
                     radius: Theme.radiusM
                     color:  _searchArea.pressed ? System.pressOverlay : "transparent"
-                    border.color: System.border
+                    border.color: Colours.palette.m3outlineVariant
                     border.width: 1
 
                     Row {
@@ -508,15 +508,15 @@ Item {
                         SvgIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             source: "qrc:/icons/search.svg"
-                            color:  System.textMuted
+                            color:  Colours.palette.m3outline
                             size:   Theme.iconXS
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text:  _expandedView.lastQuery !== "" ? _expandedView.lastQuery
                                                                   : "Buscar música"
-                            color: _expandedView.lastQuery !== "" ? System.textPrimary
-                                                                  : System.textMuted
+                            color: _expandedView.lastQuery !== "" ? Colours.palette.m3onSurface
+                                                                  : Colours.palette.m3outline
                             font.pixelSize: Theme.fontLabel
                         }
                     }
@@ -577,7 +577,7 @@ Item {
                                 id: _tabLbl
                                 anchors.centerIn: parent
                                 text:  modelData
-                                color: isActive ? System.textPrimary : System.textSecondary
+                                color: isActive ? Colours.palette.m3onSurface : Colours.palette.m3onSurfaceVariant
                                 font.pixelSize: Theme.fontLarge
                                 font.weight:    isActive ? Font.DemiBold : Font.Normal
                             }
@@ -637,7 +637,7 @@ Item {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: Player.daemonReady ? "Carregando músicas…"
                                                  : "Sem conexão com o servidor"
-                        color: System.textMuted
+                        color: Colours.palette.m3outline
                         font.pixelSize: Theme.fontBody
                     }
                     Rectangle {
@@ -645,12 +645,12 @@ Item {
                         width:  140
                         height: Theme.btnMedium
                         radius: Theme.radiusM
-                        color:  _retryArea.pressed ? System.accentDim : System.accent
+                        color:  _retryArea.pressed ? Colours.palette.m3inversePrimary : Colours.palette.m3primary
 
                         Text {
                             anchors.centerIn: parent
                             text:  "Recarregar"
-                            color: "#000000"
+                            color: Colours.palette.m3onPrimary
                             font.pixelSize: Theme.fontBody
                             font.weight:    Font.Medium
                         }
@@ -729,7 +729,7 @@ Item {
     component IconBtn: Item {
         property url   icon
         property real  size:  Theme.iconM
-        property color color: System.textSecondary
+        property color color: Colours.palette.m3onSurfaceVariant
         signal tapped()
 
         width:  Theme.btnMedium

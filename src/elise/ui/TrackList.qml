@@ -25,7 +25,7 @@ Item {
         Text {
             width: parent.width
             text:  root.heading
-            color: System.textPrimary
+            color: Colours.palette.m3onSurface
             font.pixelSize:    Theme.fontLabel
             font.weight:       Font.Medium
             font.letterSpacing: 1
@@ -45,7 +45,7 @@ Item {
                     anchors.fill: parent
                     radius: Theme.radiusM
                     color:  _tap.pressed ? System.pressOverlay
-                          : isCurrent     ? System.surface2
+                          : isCurrent     ? Colours.palette.m3surfaceContainerHigh
                           : "transparent"
                     Behavior on color { ColorAnimation { duration: Theme.durFast } }
                 }
@@ -60,7 +60,7 @@ Item {
 
                     Rectangle {
                         width:  48; height: 48; radius: Theme.radiusS
-                        color:  System.surface2
+                        color:  Colours.palette.m3surfaceContainerHigh
                         anchors.verticalCenter: parent.verticalCenter
 
                         Image {
@@ -73,7 +73,7 @@ Item {
                         SvgIcon {
                             anchors.centerIn: parent
                             source: "qrc:/icons/music-note.svg"
-                            color:  System.textMuted
+                            color:  Colours.palette.m3outline
                             size:   Theme.iconS
                             visible: (modelData.artwork || "") === ""
                         }
@@ -87,7 +87,7 @@ Item {
                         Text {
                             width: parent.width
                             text:  modelData.title || "—"
-                            color: isCurrent ? System.accent : System.textPrimary
+                            color: isCurrent ? Colours.palette.m3primary : Colours.palette.m3onSurface
                             font.pixelSize: Theme.fontBody
                             font.weight:    Font.Medium
                             elide: Text.ElideRight
@@ -95,7 +95,7 @@ Item {
                         Text {
                             width: parent.width
                             text:  modelData.artist || ""
-                            color: System.textMuted
+                            color: Colours.palette.m3outline
                             font.pixelSize: Theme.fontCaption
                             elide: Text.ElideRight
                         }
@@ -109,7 +109,7 @@ Item {
                         verticalCenter: parent.verticalCenter
                     }
                     text:  _fmtMs(modelData.duration_ms || 0)
-                    color: System.textMuted
+                    color: Colours.palette.m3outline
                     font.pixelSize: Theme.fontCaption
                 }
 

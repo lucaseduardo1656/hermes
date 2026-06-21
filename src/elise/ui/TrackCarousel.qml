@@ -24,7 +24,7 @@ Item {
         id: _heading
         anchors { left: parent.left; right: parent.right }
         text: root.heading
-        color: System.textPrimary
+        color: Colours.palette.m3onSurface
         font.pixelSize:     Theme.fontLabel
         font.weight:        Font.Medium
         font.letterSpacing: 1
@@ -60,9 +60,9 @@ Item {
                     width:  root.cardW
                     height: root.cardW
                     radius: Theme.radiusM
-                    color:  isCurrent ? System.surface2
+                    color:  isCurrent ? Colours.palette.m3surfaceContainerHigh
                           : _tap.pressed ? System.pressOverlay
-                          : System.surface2
+                          : Colours.palette.m3surfaceContainerHigh
                     Behavior on color { ColorAnimation { duration: Theme.durFast } }
 
                     Image {
@@ -75,7 +75,7 @@ Item {
                     SvgIcon {
                         anchors.centerIn: parent
                         source: "qrc:/icons/music-note.svg"
-                        color:  System.textMuted
+                        color:  Colours.palette.m3outline
                         size:   Theme.iconL
                         visible: (modelData.artwork || "") === ""
                     }
@@ -84,7 +84,7 @@ Item {
                 Text {
                     width: root.cardW
                     text:  modelData.title || "—"
-                    color: isCurrent ? System.accent : System.textPrimary
+                    color: isCurrent ? Colours.palette.m3primary : Colours.palette.m3onSurface
                     font.pixelSize: Theme.fontBody
                     font.weight:    Font.Medium
                     elide: Text.ElideRight
@@ -92,7 +92,7 @@ Item {
                 Text {
                     width: root.cardW
                     text:  modelData.artist || ""
-                    color: System.textMuted
+                    color: Colours.palette.m3outline
                     font.pixelSize: Theme.fontCaption
                     elide: Text.ElideRight
                 }
