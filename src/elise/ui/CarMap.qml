@@ -1274,27 +1274,34 @@ Item {
     }
 
     // ── POI card (tap a place / drop a pin → details + actions) — Tesla style ─
-    // Floating card on the LEFT, sitting under the search bar so search and the
-    // selected-place card share the same column like the Model 3/Y.
+    // Full-height side panel on the LEFT with the same edge gap as the toasts,
+    // so it has room for richer content (place photos, search, reviews) later.
     Rectangle {
         id: _poiCard
-        visible: root._selectedPoi !== null
+        readonly property bool _open: root._selectedPoi !== null
+        // Keep the card mounted while it animates out, and keep showing the last
+        // place so the content doesn't blank mid-slide.
+        property var _lastPoi: ({})
+        on_OpenChanged: if (_open) _lastPoi = root._selectedPoi
+
+        visible: opacity > 0.01
         z: 950
         anchors {
-            left: parent.left; top: parent.top
+            left: parent.left; top: parent.top; bottom: parent.bottom
             leftMargin: Theme.spaceL
-            topMargin: Theme.spaceL + Theme.btnMedium + Theme.spaceS
+            topMargin: Theme.spaceL
+            bottomMargin: Theme.spaceL + root.bottomOffset
         }
-        width: 340
-        height: Math.min(_poiCol.implicitHeight + 2 * Theme.spaceL,
-                         parent.height - anchors.topMargin - Theme.spaceL - root.bottomOffset)
+        width: 380
         radius: Theme.radiusL
         color: Colours.palette.m3surfaceContainerHigh
         border.color: Colours.palette.m3outlineVariant; border.width: 1
-        opacity: visible ? 1 : 0
+
+        // Slide in/out from the left edge + fade (Tesla-style), emphasized motion.
+        opacity: _open ? 1 : 0
         Behavior on opacity { Anim { type: Anim.DefaultEffects } }
 
-        readonly property var  poi: root._selectedPoi || ({})
+        readonly property var  poi: root._selectedPoi || _lastPoi || ({})
         readonly property color catColor: root._poiColor(poi.category)
         readonly property real distM: root._selectedPoi && GPS.valid
             ? QtPositioning.coordinate(poi.lat, poi.lon).distanceTo(GPS.coordinate) : -1
@@ -1307,8 +1314,7 @@ Item {
         onPoiChanged: fav = root._selectedPoi
                         ? RoadInfo.isFavorite(poi.lat, poi.lon) : false
 
-        // slide-in from the left (emphasized motion, matching the toasts)
-        transform: Translate { x: _poiCard.visible ? 0 : -40
+        transform: Translate { x: _poiCard._open ? 0 : -(_poiCard.width + Theme.spaceL * 2)
             Behavior on x { Anim { easing: Tokens.anim.emphasizedDecel } } }
 
         Flickable {
@@ -1323,14 +1329,16 @@ Item {
                 width: parent.width
                 spacing: Theme.spaceL
 
-                // Header: name + close
+                // Header: name + close. Name elides to two lines (Tesla-style);
+                // anchored to the top so a long title never overflows upward and
+                // hides behind the panel edge.
                 Item {
                     width: parent.width
-                    height: Math.max(_poiName.height, _panelClose.height)
+                    height: Math.max(_poiName.implicitHeight, _panelClose.height)
                     StyledText {
                         id: _poiName
                         anchors { left: parent.left; right: _panelClose.left
-                                  rightMargin: Theme.spaceS; verticalCenter: _panelClose.verticalCenter }
+                                  rightMargin: Theme.spaceS; top: parent.top }
                         text: _poiCard.poi.name && _poiCard.poi.name.length
                                 ? _poiCard.poi.name : root._poiCatLabel(_poiCard.poi.category)
                         color: Colours.palette.m3onSurface
@@ -1370,8 +1378,14 @@ Item {
                     width: parent.width
                     spacing: Theme.spaceS
 
+                    // All action buttons share one height; the round quick
+                    // actions are square at that height so they line up with the
+                    // prominent "Navegar".
+                    readonly property int _btnH: 52
+
                     IconTextButton {
                         Layout.fillWidth: true
+                        Layout.preferredHeight: parent._btnH
                         type: IconTextButton.Filled
                         icon: "navigation"
                         text: "Navegar"
@@ -1384,18 +1398,21 @@ Item {
                         }
                     }
                     IconButton {
+                        Layout.preferredWidth: parent._btnH; Layout.preferredHeight: parent._btnH
                         isRound: true
                         type: IconButton.Tonal
                         icon: "call"
                         disabled: !_poiCard.hasPhone
                     }
                     IconButton {
+                        Layout.preferredWidth: parent._btnH; Layout.preferredHeight: parent._btnH
                         isRound: true
                         type: IconButton.Tonal
                         icon: "language"
                         disabled: !_poiCard.hasWeb
                     }
                     IconButton {
+                        Layout.preferredWidth: parent._btnH; Layout.preferredHeight: parent._btnH
                         isRound: true
                         isToggle: true
                         type: IconButton.Tonal
