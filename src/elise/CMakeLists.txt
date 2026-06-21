@@ -78,6 +78,9 @@ set_source_files_properties(ui/MaterialSymbols.qml PROPERTIES
 set_source_files_properties(ui/Icons.qml PROPERTIES
     QT_QML_SINGLETON_TYPE TRUE
 )
+set_source_files_properties(ui/Notifs.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE TRUE
+)
 set_source_files_properties(ui/MaterialSymbolsCodepoints.qml PROPERTIES
     QT_QML_SINGLETON_TYPE TRUE
     # 4k-line codepoint map. Compiling it to C++ via qmlcache balloons to a
@@ -94,6 +97,7 @@ qt_add_qml_module(elise
         ui/MapSearchBar.qml
         ui/PlayerCard.qml
         ui/WeatherCard.qml
+        ui/Popover.qml
         ui/NavigationOverlay.qml
         ui/NotificationLayer.qml
         ui/GlobalInputBlocker.qml
@@ -171,6 +175,7 @@ qt_add_qml_module(elise
         ui/NavRow.qml
         ui/ItemList.qml
         ui/Icons.qml
+        ui/Notifs.qml
         ui/LoadingIndicator.qml
 )
 

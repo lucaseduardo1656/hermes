@@ -7,6 +7,9 @@ import Elise
 // Recents/Favorites switch and (while typing) live geocode results. Picking
 // an item normally routes there; when RoadInfo is in "set place" mode it is
 // saved to Home/Work instead.
+//
+// Styled with the nexus design tokens (Tokens/Colours) + Material Symbols to
+// match the settings UI.
 Item {
     id: root
 
@@ -22,15 +25,13 @@ Item {
     readonly property bool _navigating: map && map.hasDestination && !_editing
     readonly property bool _typing: query.trim().length >= 3
     readonly property bool _setting: RoadInfo.pendingPlace !== ""
-    // Panel is shown while searching (keyboard ours or results open), but not
-    // while we're acting as the navigation header.
     readonly property bool _panelOpen: (_editing || open) && !_navigating
 
     readonly property var _items: _typing ? results
                                : tab === "favoritos" ? RoadInfo.favorites
                                : RoadInfo.recents
 
-    implicitHeight: _field.height + (_panelOpen ? 6 + _panel.height : 0)
+    implicitHeight: _field.height + (_panelOpen ? Tokens.spacing.small + _panel.height : 0)
     Behavior on implicitHeight {
         NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutQuad }
     }
@@ -98,44 +99,46 @@ Item {
     Rectangle {
         id: _field
         anchors { left: parent.left; right: parent.right; top: parent.top }
-        height: root._navigating ? 60 : Theme.btnMedium
-        radius: Theme.radiusM
-        color: System.surface
-        border.color: root._editing ? System.accent : System.border
+        height: root._navigating ? 60 : Theme.btnLarge
+        radius: Tokens.rounding.full
+        color: Colours.palette.m3surfaceContainerLowest
+        border.color: root._editing ? Colours.palette.m3primary : Colours.palette.m3outlineVariant
         border.width: 1
         Behavior on height { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutQuad } }
+        Behavior on border.color { CAnim {} }
 
-        SvgIcon {
+        MaterialIcon {
             id: _leadIcon
-            anchors { left: parent.left; leftMargin: Theme.spaceM; verticalCenter: parent.verticalCenter }
-            source: root._navigating ? "qrc:/icons/arrow-straight.svg" : "qrc:/icons/search.svg"
-            color:  root._navigating ? System.accent : System.textMuted
-            size:   root._navigating ? Theme.iconS : Theme.iconXS
+            anchors { left: parent.left; leftMargin: Theme.spaceL; verticalCenter: parent.verticalCenter }
+            symbol: root._navigating ? "navigation" : "search"
+            color:  root._navigating ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+            fontStyle: Tokens.font.icon.small
+            fill: root._navigating ? 1 : 0
         }
 
         Column {
             anchors {
-                left: _leadIcon.right; leftMargin: Theme.spaceM
+                left: _leadIcon.right; leftMargin: Tokens.spacing.medium
                 right: _clearChip.visible ? _clearChip.left : parent.right
-                rightMargin: Theme.spaceS; verticalCenter: parent.verticalCenter
+                rightMargin: Tokens.spacing.small; verticalCenter: parent.verticalCenter
             }
             spacing: 1
-            Text {
+            StyledText {
                 visible: root._navigating || root._setting
                 width: parent.width
                 text: root._setting
                         ? (RoadInfo.pendingPlace === "home" ? "DEFININDO CASA" : "DEFININDO TRABALHO")
                         : "NAVEGANDO"
-                color: System.accent
+                color: Colours.palette.m3primary
                 font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 1.2
             }
-            Text {
+            StyledText {
                 width: parent.width
                 text: root._navigating ? (root.map.destinationName || "Destino")
                      : root._setting   ? "Escolha o local…"
                      : root.query !== "" ? root.query : "Para onde?"
-                color: (root._navigating || root.query !== "") ? System.textPrimary : System.textMuted
-                font.pixelSize: Theme.fontLabel
+                color: (root._navigating || root.query !== "") ? Colours.palette.m3onSurface : Colours.palette.m3onSurfaceVariant
+                font.pointSize: Tokens.font.body.large.pointSize
                 font.weight: root._navigating ? Font.Bold : Font.Normal
                 elide: Text.ElideRight
             }
@@ -144,11 +147,11 @@ Item {
         Rectangle {
             id: _clearChip
             visible: (root.map && root.map.hasDestination) || root.query !== ""
-            anchors { right: parent.right; rightMargin: Theme.spaceXS; verticalCenter: parent.verticalCenter }
+            anchors { right: parent.right; rightMargin: Tokens.spacing.extraSmall; verticalCenter: parent.verticalCenter }
             width: Theme.btnSmall; height: Theme.btnSmall; radius: width / 2
-            color: _clearArea.pressed ? System.pressOverlay : "transparent"
-            SvgIcon { anchors.centerIn: parent; source: "qrc:/icons/close.svg"
-                      color: System.textSecondary; size: Theme.iconXS }
+            color: _clearArea.pressed ? Colours.palette.m3surfaceContainerHighest : "transparent"
+            MaterialIcon { anchors.centerIn: parent; symbol: "close"
+                           color: Colours.palette.m3onSurfaceVariant; fontStyle: Tokens.font.icon.small }
             MouseArea {
                 id: _clearArea; anchors.fill: parent
                 onClicked: {
@@ -162,7 +165,7 @@ Item {
         MouseArea {
             anchors {
                 fill: parent
-                rightMargin: _clearChip.visible ? Theme.btnSmall + Theme.spaceXS * 2 : 0
+                rightMargin: _clearChip.visible ? Theme.btnSmall + Tokens.spacing.extraSmall * 2 : 0
             }
             onClicked: root._openKeyboard()
         }
@@ -171,25 +174,25 @@ Item {
     // ── Search panel ──────────────────────────────────────────────────────
     Rectangle {
         id: _panel
-        anchors { left: parent.left; right: parent.right; top: _field.bottom; topMargin: Theme.spaceXS }
-        height: _panelCol.implicitHeight + Theme.spaceM * 2
-        radius: Theme.radiusM
-        color: System.surface
-        border.color: System.border; border.width: 1
+        anchors { left: parent.left; right: parent.right; top: _field.bottom; topMargin: Tokens.spacing.small }
+        height: _panelCol.implicitHeight + Tokens.padding.large * 2
+        radius: Tokens.rounding.large
+        color: Colours.palette.m3surfaceContainer
+        border.color: Colours.palette.m3outlineVariant; border.width: 1
         visible: root._panelOpen
         clip: true
 
         Column {
             id: _panelCol
             anchors { left: parent.left; right: parent.right; top: parent.top
-                      margins: Theme.spaceM }
-            spacing: Theme.spaceS
+                      margins: Tokens.padding.large }
+            spacing: Tokens.spacing.small
 
             // Home / Work shortcuts (hidden while actively typing a query)
             Row {
                 width: parent.width
                 visible: !root._typing
-                spacing: Theme.spaceS
+                spacing: Tokens.spacing.small
 
                 component Shortcut: Rectangle {
                     id: sc
@@ -198,24 +201,26 @@ Item {
                     property string label
                     property bool   isSet
                     width: (parent.width - parent.spacing) / 2
-                    height: 46; radius: Theme.radiusM
-                    color: _scArea.pressed ? System.surface2 : "transparent"
-                    border.color: System.border; border.width: 1
+                    height: 46; radius: Tokens.rounding.medium
+                    color: _scArea.pressed ? Colours.palette.m3surfaceContainerHigh : "transparent"
+                    border.color: Colours.palette.m3outlineVariant; border.width: 1
 
-                    SvgIcon {
+                    MaterialIcon {
                         id: _scIcon
-                        anchors { left: parent.left; leftMargin: Theme.spaceM
+                        anchors { left: parent.left; leftMargin: Tokens.padding.large
                                   verticalCenter: parent.verticalCenter }
-                        size: 18; source: sc.icon
-                        color: sc.isSet ? System.accent : System.textSecondary
+                        symbol: sc.icon
+                        fontStyle: Tokens.font.icon.small
+                        color: sc.isSet ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                        fill: sc.isSet ? 1 : 0
                     }
-                    Text {
-                        anchors { left: _scIcon.right; leftMargin: Theme.spaceS
-                                  right: parent.right; rightMargin: Theme.spaceS
+                    StyledText {
+                        anchors { left: _scIcon.right; leftMargin: Tokens.spacing.small
+                                  right: parent.right; rightMargin: Tokens.spacing.small
                                   verticalCenter: parent.verticalCenter }
                         text: sc.label
-                        color: sc.isSet ? System.textPrimary : System.textMuted
-                        font.pixelSize: Theme.fontLabel; font.weight: Font.Medium
+                        color: sc.isSet ? Colours.palette.m3onSurface : Colours.palette.m3onSurfaceVariant
+                        font: Tokens.font.body.small
                         elide: Text.ElideRight
                     }
                     MouseArea { id: _scArea; anchors.fill: parent
@@ -223,11 +228,11 @@ Item {
                 }
 
                 Shortcut {
-                    which: "home"; icon: "qrc:/icons/home.svg"; label: "Casa"
+                    which: "home"; icon: "home"; label: "Casa"
                     isSet: RoadInfo.home && RoadInfo.home.lat !== undefined
                 }
                 Shortcut {
-                    which: "work"; icon: "qrc:/icons/work.svg"; label: "Trabalho"
+                    which: "work"; icon: "work"; label: "Trabalho"
                     isSet: RoadInfo.work && RoadInfo.work.lat !== undefined
                 }
             }
@@ -236,24 +241,24 @@ Item {
             Row {
                 width: parent.width
                 visible: !root._typing
-                spacing: Theme.spaceL
+                spacing: Tokens.spacing.large
 
                 Repeater {
                     model: [{ k: "recentes", t: "Recentes" }, { k: "favoritos", t: "Favoritos" }]
                     Item {
                         required property var modelData
                         width: _tabTxt.width; height: 30
-                        Text {
+                        StyledText {
                             id: _tabTxt
                             anchors.verticalCenter: parent.verticalCenter
                             text: modelData.t
-                            color: root.tab === modelData.k ? System.textPrimary : System.textMuted
-                            font.pixelSize: Theme.fontLabel
+                            color: root.tab === modelData.k ? Colours.palette.m3onSurface : Colours.palette.m3onSurfaceVariant
+                            font.pointSize: Tokens.font.body.small.pointSize
                             font.weight: root.tab === modelData.k ? Font.Bold : Font.Normal
                         }
                         Rectangle {
                             anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                            height: 2; radius: 1; color: System.accent
+                            height: 2; radius: 1; color: Colours.palette.m3primary
                             visible: root.tab === modelData.k
                         }
                         MouseArea { anchors.fill: parent; onClicked: root.tab = modelData.k }
@@ -262,14 +267,15 @@ Item {
             }
 
             // Empty hint
-            Text {
+            StyledText {
                 width: parent.width
                 visible: root._items.length === 0
                 text: root._typing ? "Buscando…"
                     : root.tab === "favoritos" ? "Sem favoritos ainda."
                     : "Sem destinos recentes."
-                color: System.textMuted; font.pixelSize: Theme.fontLabel
-                topPadding: Theme.spaceS; bottomPadding: Theme.spaceS
+                color: Colours.palette.m3onSurfaceVariant
+                font: Tokens.font.body.small
+                topPadding: Tokens.spacing.small; bottomPadding: Tokens.spacing.small
             }
 
             // Results / recents / favorites list
@@ -297,40 +303,41 @@ Item {
                     readonly property string _sub: _isResult ? "" : (modelData.address || "")
 
                     Rectangle { anchors.fill: parent
-                                color: _rowArea.pressed ? System.surface2 : "transparent" }
+                                color: _rowArea.pressed ? Colours.palette.m3surfaceContainerHigh : "transparent" }
 
-                    SvgIcon {
+                    MaterialIcon {
                         id: _rowIcon
                         anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                        size: 20; color: System.textSecondary
-                        source: root._typing ? "qrc:/icons/search.svg"
-                              : root.tab === "favoritos" ? "qrc:/icons/star.svg"
-                              : "qrc:/icons/clock.svg"
+                        fontStyle: Tokens.font.icon.medium
+                        color: Colours.palette.m3onSurfaceVariant
+                        symbol: root._typing ? "search"
+                              : root.tab === "favoritos" ? "star"
+                              : "schedule"
                     }
                     Column {
                         anchors {
-                            left: _rowIcon.right; leftMargin: Theme.spaceM
-                            right: _rowDist.left; rightMargin: Theme.spaceS
+                            left: _rowIcon.right; leftMargin: Tokens.spacing.medium
+                            right: _rowDist.left; rightMargin: Tokens.spacing.small
                             verticalCenter: parent.verticalCenter
                         }
                         spacing: 1
-                        Text { width: parent.width; text: parent.parent._name
-                               color: System.textPrimary; font.pixelSize: Theme.fontLabel
+                        StyledText { width: parent.width; text: parent.parent._name
+                               color: Colours.palette.m3onSurface; font: Tokens.font.body.small
                                elide: Text.ElideRight }
-                        Text { width: parent.width; visible: parent.parent._sub !== ""
+                        StyledText { width: parent.width; visible: parent.parent._sub !== ""
                                text: parent.parent._sub
-                               color: System.textMuted; font.pixelSize: 12
+                               color: Colours.palette.m3onSurfaceVariant; font: Tokens.font.label.small
                                elide: Text.ElideRight }
                     }
-                    Text {
+                    StyledText {
                         id: _rowDist
                         anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                         text: root._distStr(_coord.latitude, _coord.longitude)
-                        color: System.textSecondary; font.pixelSize: 12
+                        color: Colours.palette.m3onSurfaceVariant; font: Tokens.font.label.small
                     }
                     Rectangle { visible: index < root._items.length - 1
                                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                                height: 1; color: System.border }
+                                height: 1; color: Colours.palette.m3outlineVariant }
 
                     MouseArea { id: _rowArea; anchors.fill: parent
                                 onClicked: root._pick(parent._coord, parent._name, parent._sub) }

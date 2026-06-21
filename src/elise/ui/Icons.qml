@@ -33,4 +33,22 @@ QtObject {
         if (isMuted || volume <= 0) return "no_sound";
         return "volume_up";
     }
+
+    // Map a notification summary + urgency to a Material glyph (Caelestia parity).
+    // urgency: 2 = critical.
+    function getNotifIcon(summary, urgency) {
+        const s = (summary || "").toLowerCase();
+        if (s.includes("reboot") || s.includes("reinic")) return "restart_alt";
+        if (s.includes("battery") || s.includes("bateria")) return "power";
+        if (s.includes("welcome") || s.includes("bem-vindo")) return "waving_hand";
+        if (s.includes("update") || s.includes("atualiza")) return "update";
+        if (s.includes("install") || s.includes("instal")) return "download";
+        if (s.includes("unable") || s.includes("falha") || s.includes("erro")) return "deployed_code_alert";
+        if (s.includes("wi-fi") || s.includes("wifi") || s.includes("rede")) return "wifi";
+        if (s.includes("bluetooth")) return "bluetooth";
+        if (s.includes("rota") || s.includes("route") || s.includes("navega")) return "navigation";
+        if (s.includes("file") || s.includes("arquivo")) return "folder_copy";
+        if (urgency >= 2) return "release_alert";
+        return "chat";
+    }
 }

@@ -20,8 +20,8 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: width / 2
-        color:  _area.pressed ? System.pressOverlay : System.surface
-        border.color: System.border
+        color:  _area.pressed ? Colours.palette.m3surfaceContainerHigh : Colours.palette.m3surfaceContainer
+        border.color: Colours.palette.m3outlineVariant
         border.width: 1
         Behavior on color { ColorAnimation { duration: Theme.durFast } }
     }
@@ -50,7 +50,7 @@ Item {
             ShapePath {
                 strokeWidth: 0
                 strokeColor: "transparent"
-                fillColor: System.accent
+                fillColor: Colours.palette.m3primary
                 startX: _dial._cx; startY: 6
                 PathLine { x: _dial._cx + 6; y: _dial._cy }
                 PathLine { x: _dial._cx;     y: _dial._cy }
@@ -60,7 +60,7 @@ Item {
             ShapePath {
                 strokeWidth: 0
                 strokeColor: "transparent"
-                fillColor: System.textMuted
+                fillColor: Colours.palette.m3onSurfaceVariant
                 startX: _dial._cx; startY: _dial.height - 6
                 PathLine { x: _dial._cx + 5; y: _dial._cy }
                 PathLine { x: _dial._cx;     y: _dial._cy }
@@ -74,7 +74,7 @@ Item {
             anchors.centerIn: parent
             width: 4; height: 4
             radius: 2
-            color: System.textPrimary
+            color: Colours.palette.m3onSurface
         }
 
         // Tiny N marker just outside the dial top.
@@ -82,7 +82,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.top; anchors.topMargin: -3
             text: "N"
-            color: System.accent
+            color: Colours.palette.m3primary
             font.pixelSize: 9
             font.weight: Font.Bold
         }

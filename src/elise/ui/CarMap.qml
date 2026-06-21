@@ -983,7 +983,7 @@ Item {
                                 ? GPS.horizontalAccuracy / root._mpp : 0, 80)
                         anchors.centerIn: parent
                         width: _r * 2; height: _r * 2; radius: _r
-                        color: System.accent; opacity: 0.15
+                        color: Colours.palette.m3primary; opacity: 0.15
                         visible: _r > 18
                     }
                     Item {
@@ -997,7 +997,7 @@ Item {
                                 PathLine { x:32; y: 4 } } }
                     }
                     Rectangle { anchors.centerIn: parent; width:28; height:28; radius:14; color:"white" }
-                    Rectangle { anchors.centerIn: parent; width:22; height:22; radius:11; color:System.accent }
+                    Rectangle { anchors.centerIn: parent; width:22; height:22; radius:11; color:Colours.palette.m3primary }
                 }
 
                 // ── Style 1: pulse beacon ─────────────────────────────────────
@@ -1007,7 +1007,7 @@ Item {
 
                     Rectangle {
                         anchors.centerIn: parent; width:22; height:22; radius:11
-                        color:"transparent"; border.color:System.accent; border.width:2
+                        color:"transparent"; border.color:Colours.palette.m3primary; border.width:2
                         SequentialAnimation on scale { loops:Animation.Infinite
                             NumberAnimation { from:1; to:3.2; duration:1300; easing.type:Easing.OutQuad }
                             PauseAnimation  { duration:400 } }
@@ -1026,7 +1026,7 @@ Item {
                                 PathLine { x:32; y: 4 } } }
                     }
                     Rectangle { anchors.centerIn: parent; width:20; height:20; radius:10; color:"white" }
-                    Rectangle { anchors.centerIn: parent; width:14; height:14; radius: 7; color:System.accent }
+                    Rectangle { anchors.centerIn: parent; width:14; height:14; radius: 7; color:Colours.palette.m3primary }
                 }
 
                 // ── Style 2: navigation arrow ─────────────────────────────────
@@ -1038,7 +1038,7 @@ Item {
                     Shape {
                         anchors.fill: parent
                         ShapePath {
-                            fillColor: System.accent; strokeColor:"white"; strokeWidth:2
+                            fillColor: Colours.palette.m3primary; strokeColor:"white"; strokeWidth:2
                             PathMove { x:32; y: 5 }
                             PathLine { x:50; y:52 }
                             PathLine { x:32; y:40 }
@@ -1104,7 +1104,7 @@ Item {
                     anchors.top: parent.top; anchors.topMargin: 24
                     width: 14; height: 14
                     rotation: 45
-                    color: System.accent
+                    color: Colours.palette.m3primary
                     border.color: "#FFFFFF"
                     border.width: 3
                     z: -1
@@ -1114,7 +1114,7 @@ Item {
                     anchors.top: parent.top
                     width: 36; height: 36
                     radius: 18
-                    color: System.accent
+                    color: Colours.palette.m3primary
                     border.color: "#FFFFFF"
                     border.width: 3
                     Rectangle {
@@ -1131,7 +1131,7 @@ Item {
         MapPolyline {
             visible: root.hasDestination && root._remainingPath.length > 1
             path: root._remainingPath
-            line.color: System.accent
+            line.color: Colours.palette.m3primary
             line.width: 6
             opacity: 0.85
         }
@@ -1224,9 +1224,9 @@ Item {
             bottomMargin: Theme.spaceL + root.bottomOffset
         }
         width: 64; height: 64; radius: 32
-        color: RoadInfo.overLimit ? "#D32F2F" : System.surface
+        color: RoadInfo.overLimit ? "#D32F2F" : Colours.palette.m3surfaceContainer
         opacity: 0.92
-        border.color: RoadInfo.overLimit ? "#FF6B6B" : System.border
+        border.color: RoadInfo.overLimit ? "#FF6B6B" : Colours.palette.m3outlineVariant
         border.width: 1
         visible: GPS.valid && GPS.speed > 0.3
 
@@ -1238,13 +1238,13 @@ Item {
         Text {
             anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 10 }
             text: Math.round(root._speedKph)
-            color: RoadInfo.overLimit ? "white" : System.textPrimary
+            color: RoadInfo.overLimit ? "white" : Colours.palette.m3onSurface
             font.pixelSize: 22; font.weight: Font.Bold
         }
         Text {
             anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 9 }
             text: "km/h"
-            color: RoadInfo.overLimit ? "#FFE0E0" : System.textSecondary
+            color: RoadInfo.overLimit ? "#FFE0E0" : Colours.palette.m3onSurfaceVariant
             font.pixelSize: 11
         }
     }
@@ -1288,8 +1288,8 @@ Item {
         height: Math.min(_poiCol.implicitHeight + 2 * Theme.spaceL,
                          parent.height - anchors.topMargin - Theme.spaceL - root.bottomOffset)
         radius: Theme.radiusL
-        color: System.surface
-        border.color: System.border; border.width: 1
+        color: Colours.palette.m3surfaceContainer
+        border.color: Colours.palette.m3outlineVariant; border.width: 1
         opacity: visible ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 140 } }
 
@@ -1332,7 +1332,7 @@ Item {
                                   rightMargin: Theme.spaceS; top: parent.top }
                         text: _poiCard.poi.name && _poiCard.poi.name.length
                                 ? _poiCard.poi.name : root._poiCatLabel(_poiCard.poi.category)
-                        color: System.textPrimary
+                        color: Colours.palette.m3onSurface
                         font.pixelSize: 22; font.weight: Font.Bold
                         wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight
                     }
@@ -1340,10 +1340,10 @@ Item {
                         id: _panelClose
                         width: 30; height: 30; radius: 15
                         anchors { right: parent.right; top: parent.top }
-                        color: _pcArea.pressed ? System.border : "transparent"
-                        SvgIcon {
-                            anchors.centerIn: parent; size: 16; color: System.textSecondary
-                            source: "qrc:/icons/close.svg"
+                        color: _pcArea.pressed ? Colours.palette.m3surfaceContainerHigh : "transparent"
+                        MaterialIcon {
+                            anchors.centerIn: parent; fontStyle: Tokens.font.icon.small
+                            color: Colours.palette.m3onSurfaceVariant; symbol: "close"
                         }
                         MouseArea { id: _pcArea; anchors.fill: parent
                                     onClicked: root._selectedPoi = null }
@@ -1362,7 +1362,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         text: root._poiLabel(_poiCard.poi)
                               + (_poiCard.distStr ? "   ·   " + _poiCard.distStr : "")
-                        color: System.textSecondary; font.pixelSize: 14
+                        color: Colours.palette.m3onSurfaceVariant; font.pixelSize: 14
                     }
                 }
 
@@ -1382,28 +1382,29 @@ Item {
                         property bool active: false
                         signal act()
                         width: _actRow.btnW; height: 64; radius: Theme.radiusM
-                        color: _ab.primary ? (_aArea.pressed ? System.accentDim : System.accent)
-                                           : (_ab.active ? Qt.rgba(System.accent.r, System.accent.g, System.accent.b, 0.18)
-                                                         : (_aArea.pressed ? System.border : "transparent"))
+                        color: _ab.primary ? (_aArea.pressed ? Colours.palette.m3inversePrimary : Colours.palette.m3primary)
+                                           : (_ab.active ? Qt.rgba(Colours.palette.m3primary.r, Colours.palette.m3primary.g, Colours.palette.m3primary.b, 0.18)
+                                                         : (_aArea.pressed ? Colours.palette.m3outlineVariant : "transparent"))
                         border.color: _ab.primary ? "transparent"
-                                                  : (_ab.active ? System.accent : System.border)
+                                                  : (_ab.active ? Colours.palette.m3primary : Colours.palette.m3outlineVariant)
                         border.width: _ab.primary ? 0 : 1
                         opacity: _ab.enabledAct ? 1 : 0.35
                         Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         Column {
                             anchors.centerIn: parent; spacing: 4
-                            SvgIcon {
+                            MaterialIcon {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                size: 22
-                                color: _ab.primary ? "#000000"
-                                                   : (_ab.active ? System.accent : System.textPrimary)
-                                source: _ab.icon
+                                fontStyle: Tokens.font.icon.medium
+                                fill: _ab.primary || _ab.active ? 1 : 0
+                                color: _ab.primary ? Colours.palette.m3onPrimary
+                                                   : (_ab.active ? Colours.palette.m3primary : Colours.palette.m3onSurface)
+                                symbol: _ab.icon
                             }
-                            Text {
+                            StyledText {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: _ab.label
-                                color: _ab.primary ? "#000000"
-                                                   : (_ab.active ? System.accent : System.textSecondary)
+                                color: _ab.primary ? Colours.palette.m3onPrimary
+                                                   : (_ab.active ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant)
                                 font.pixelSize: 11; font.weight: Font.Medium
                             }
                         }
@@ -1415,7 +1416,7 @@ Item {
                     }
 
                     ActionBtn {
-                        icon: "qrc:/icons/arrow-straight.svg"; label: "Navegar"
+                        icon: "navigation"; label: "Navegar"
                         primary: true
                         onAct: {
                             root.setDestination(
@@ -1425,15 +1426,15 @@ Item {
                         }
                     }
                     ActionBtn {
-                        icon: "qrc:/icons/phone.svg"; label: "Ligar"
+                        icon: "call"; label: "Ligar"
                         enabledAct: _poiCard.hasPhone
                     }
                     ActionBtn {
-                        icon: "qrc:/icons/globe.svg"; label: "Site"
+                        icon: "language"; label: "Site"
                         enabledAct: _poiCard.hasWeb
                     }
                     ActionBtn {
-                        icon: "qrc:/icons/star.svg"; label: "Salvar"
+                        icon: "star"; label: "Salvar"
                         active: _poiCard.fav
                         onAct: {
                             RoadInfo.toggleFavorite(_poiCard.poi.lat, _poiCard.poi.lon,
@@ -1444,7 +1445,7 @@ Item {
                 }
 
                 // Divider
-                Rectangle { width: parent.width; height: 1; color: System.border
+                Rectangle { width: parent.width; height: 1; color: Colours.palette.m3outlineVariant
                             visible: _poiCard.hasAddr || _poiCard.hasPhone }
 
                 // Address
@@ -1453,13 +1454,13 @@ Item {
                     visible: _poiCard.hasAddr
                     spacing: Theme.spaceM
                     SvgIcon {
-                        size: 18; color: System.textSecondary
+                        size: 18; color: Colours.palette.m3onSurfaceVariant
                         source: "qrc:/icons/place.svg"
                     }
                     Text {
                         width: parent.width - 18 - Theme.spaceM
                         text: "" + (_poiCard.poi.address || "")
-                        color: System.textPrimary; font.pixelSize: 14
+                        color: Colours.palette.m3onSurface; font.pixelSize: 14
                         wrapMode: Text.WordWrap; elide: Text.ElideRight; maximumLineCount: 3
                     }
                 }
@@ -1470,12 +1471,12 @@ Item {
                     visible: _poiCard.hasPhone
                     spacing: Theme.spaceM
                     SvgIcon {
-                        size: 18; color: System.textSecondary
+                        size: 18; color: Colours.palette.m3onSurfaceVariant
                         source: "qrc:/icons/phone.svg"
                     }
                     Text {
                         text: "" + (_poiCard.poi.phone || "")
-                        color: System.textPrimary; font.pixelSize: 14
+                        color: Colours.palette.m3onSurface; font.pixelSize: 14
                     }
                 }
             }
@@ -1537,9 +1538,9 @@ Item {
             bottomMargin: Theme.spaceL + root.bottomOffset + 72
         }
         width: 196; height: 64; radius: 32
-        color: System.surface
+        color: Colours.palette.m3surfaceContainer
         opacity: 0.96
-        border.color: System.border; border.width: 1
+        border.color: Colours.palette.m3outlineVariant; border.width: 1
 
         Row {
             anchors.centerIn: parent; spacing: 8
@@ -1551,16 +1552,16 @@ Item {
                     required property string modelData
                     width: 52; height: 52; radius: 26
                     color: root._markerStyle === index
-                               ? Qt.rgba(System.accent.r, System.accent.g,
-                                         System.accent.b, 0.22)
+                               ? Qt.rgba(Colours.palette.m3primary.r, Colours.palette.m3primary.g,
+                                         Colours.palette.m3primary.b, 0.22)
                                : "transparent"
-                    border.color: root._markerStyle === index ? System.accent : System.border
+                    border.color: root._markerStyle === index ? Colours.palette.m3primary : Colours.palette.m3outlineVariant
                     border.width: root._markerStyle === index ? 2 : 1
 
                     Text {
                         anchors.centerIn: parent
                         text: modelData
-                        color: root._markerStyle === index ? System.accent : System.textSecondary
+                        color: root._markerStyle === index ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
                         font.pixelSize: 22
                     }
                     MouseArea {
@@ -1590,9 +1591,9 @@ Item {
         width: _locCol.width + Theme.spaceL * 2
         height: _locCol.height + Theme.spaceS * 2
         radius: Theme.radiusM
-        color: System.surface
+        color: Colours.palette.m3surfaceContainer
         opacity: 0.94
-        border.color: System.border; border.width: 1
+        border.color: Colours.palette.m3outlineVariant; border.width: 1
 
         Column {
             id: _locCol
@@ -1601,7 +1602,7 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root._curStreet
-                color: System.textPrimary
+                color: Colours.palette.m3onSurface
                 font.pixelSize: 15; font.weight: Font.Bold
                 elide: Text.ElideRight
                 width: Math.min(implicitWidth, 360)
@@ -1610,7 +1611,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: root._curArea !== ""
                 text: root._curArea
-                color: System.textSecondary; font.pixelSize: 12
+                color: Colours.palette.m3onSurfaceVariant; font.pixelSize: 12
                 elide: Text.ElideRight
                 width: Math.min(implicitWidth, 360)
             }

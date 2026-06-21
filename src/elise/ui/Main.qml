@@ -128,8 +128,8 @@ Window {
             height: _previewCol.implicitHeight + Theme.spaceL * 2
             visible: _map && _map.hasDestination && _map.routeDistanceM > 0 && !_map.navStarted
             radius: Theme.radiusL
-            color: System.surface
-            border.color: System.border
+            color: Colours.palette.m3surfaceContainer
+            border.color: Colours.palette.m3outlineVariant
             border.width: 1
 
             readonly property real _durMin: _map ? _map.routeDurationS / 60 : 0
@@ -155,14 +155,14 @@ Window {
                     Column {
                         width: parent.width - _etaCol.width
                         spacing: 1
-                        Text {
+                        StyledText {
                             text: Math.round(_routePreview._durMin) + " min"
-                            color: System.textPrimary
+                            color: Colours.palette.m3onSurface
                             font.pixelSize: Theme.fontTitle; font.weight: Font.Bold
                         }
-                        Text {
+                        StyledText {
                             text: _routePreview._distStr + "  ·  chegada " + _routePreview._eta
-                            color: System.textSecondary; font.pixelSize: Theme.fontLabel
+                            color: Colours.palette.m3onSurfaceVariant; font.pixelSize: Theme.fontLabel
                         }
                     }
                     Item { id: _etaCol; width: 0; height: 1 }
@@ -175,15 +175,15 @@ Window {
                     Rectangle {
                         width: parent.width - _cancelBtn.width - parent.spacing
                         height: 48; radius: Theme.radiusM
-                        color: _goArea.pressed ? System.accentDim : System.accent
+                        color: _goArea.pressed ? Colours.palette.m3inversePrimary : Colours.palette.m3primary
                         Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         Row {
                             anchors.centerIn: parent; spacing: Theme.spaceS
-                            SvgIcon { anchors.verticalCenter: parent.verticalCenter
-                                      size: 20; color: "#000000"
-                                      source: "qrc:/icons/arrow-straight.svg" }
-                            Text { anchors.verticalCenter: parent.verticalCenter
-                                   text: "Iniciar"; color: "#000000"
+                            MaterialIcon { anchors.verticalCenter: parent.verticalCenter
+                                      fontStyle: Tokens.font.icon.small; color: Colours.palette.m3onPrimary
+                                      symbol: "navigation"; fill: 1 }
+                            StyledText { anchors.verticalCenter: parent.verticalCenter
+                                   text: "Iniciar"; color: Colours.palette.m3onPrimary
                                    font.pixelSize: Theme.fontBody; font.weight: Font.Bold }
                         }
                         MouseArea { id: _goArea; anchors.fill: parent
@@ -192,10 +192,10 @@ Window {
                     Rectangle {
                         id: _cancelBtn
                         width: 48; height: 48; radius: Theme.radiusM
-                        color: _cxArea.pressed ? System.surface2 : "transparent"
-                        border.color: System.border; border.width: 1
-                        SvgIcon { anchors.centerIn: parent; size: 18
-                                  color: System.textSecondary; source: "qrc:/icons/close.svg" }
+                        color: _cxArea.pressed ? Colours.palette.m3surfaceContainerHigh : "transparent"
+                        border.color: Colours.palette.m3outlineVariant; border.width: 1
+                        MaterialIcon { anchors.centerIn: parent; fontStyle: Tokens.font.icon.small
+                                  color: Colours.palette.m3onSurfaceVariant; symbol: "close" }
                         MouseArea { id: _cxArea; anchors.fill: parent
                                     onClicked: if (_map) _map.clearDestination() }
                     }
@@ -234,7 +234,8 @@ Window {
         visible: root.playerState !== "expanded"
 
         Fab {     // summon player — only when it's hidden
-            icon: "qrc:/icons/music-note.svg"
+            symbol: "music_note"
+            primary: true
             visible: !root._playerVisible
             onClicked: root.playerState = "half"
         }
@@ -243,7 +244,7 @@ Window {
             onResetRequested: if (_map) _map.recenter()
         }
         Fab {     // settings
-            icon: "qrc:/icons/settings.svg"
+            symbol: "settings"
             onClicked: _settings.open = true
         }
     }
@@ -282,8 +283,9 @@ Window {
     // ── Notifications ────────────────────────────────────────────────────────
     NotificationLayer {
         id: notifications
-        anchors { top: parent.top; left: parent.left; right: parent.right }
+        anchors.fill: parent
         z: 1000
+
     }
 
     // ── Settings menu ────────────────────────────────────────────────────────

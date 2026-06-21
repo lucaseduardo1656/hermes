@@ -23,8 +23,8 @@ Item {
         width:  Math.min(parent.width - Theme.spaceXXL * 2, 480)
         height: _col.implicitHeight + Theme.spaceL * 2
         radius: Theme.radiusL
-        color:  System.surface
-        border.color: System.border
+        color:  Colours.palette.m3surfaceContainer
+        border.color: Colours.palette.m3outlineVariant
         border.width: Theme.borderHairline
 
         MouseArea { anchors.fill: parent; onClicked: {} }
@@ -37,9 +37,9 @@ Item {
             }
             spacing: 0
 
-            Text {
+            StyledText {
                 text: ActionSheet.title
-                color: System.textMuted
+                color: Colours.palette.m3onSurfaceVariant
                 font.pixelSize: Theme.fontSmall
                 visible: ActionSheet.title !== ""
                 bottomPadding: Theme.spaceM
@@ -55,18 +55,18 @@ Item {
                     Rectangle {
                         anchors { left: parent.left; right: parent.right; top: parent.top }
                         height: Theme.borderHairline
-                        color:  System.border
+                        color:  Colours.palette.m3outlineVariant
                         visible: index > 0
                     }
 
-                    Text {
+                    StyledText {
                         anchors {
                             left: parent.left; leftMargin: Theme.spaceM
                             right: parent.right; rightMargin: Theme.spaceM
                             verticalCenter: parent.verticalCenter
                         }
                         text:  modelData.label
-                        color: modelData.destructive ? System.danger : System.textPrimary
+                        color: modelData.destructive ? Colours.palette.m3error : Colours.palette.m3onSurface
                         font.pixelSize: Theme.fontMedium
                         font.weight: modelData.destructive ? Font.Medium : Font.Normal
                         elide: Text.ElideRight

@@ -69,6 +69,8 @@ QtObject {
         readonly property var standardAccel: ({ type: Easing.BezierSpline, bezierCurve: [0.3, 0.0, 1.0, 1.0, 1.0, 1.0] })
         readonly property var standardDecel: ({ type: Easing.BezierSpline, bezierCurve: [0.0, 0.0, 0.0, 1.0, 1.0, 1.0] })
         readonly property var emphasized:    ({ type: Easing.BezierSpline, bezierCurve: [0.3, 0.0, 0.0, 1.0, 1.0, 1.0] })
+        readonly property var emphasizedAccel: ({ type: Easing.BezierSpline, bezierCurve: [0.3, 0.0, 0.8, 0.15, 1.0, 1.0] })
+        readonly property var emphasizedDecel: ({ type: Easing.BezierSpline, bezierCurve: [0.05, 0.7, 0.1, 1.0, 1.0, 1.0] })
         readonly property var expressiveFastSpatial:    standard
         readonly property var expressiveDefaultSpatial: emphasized
         readonly property var expressiveSlowSpatial:    emphasized

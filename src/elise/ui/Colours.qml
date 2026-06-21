@@ -31,24 +31,32 @@ QtObject {
     }
     readonly property QtObject tPalette: palette
 
+    // M3 contract: a *container* is a low tone (dark in dark mode) and its
+    // *on* colour is a high tone (light in dark mode), so text is always legible.
+    // `_container` keeps the surface base and only lightly tints toward accent;
+    // `_onContainer` rides the text colour with a faint accent tint. This holds
+    // the same contrast Caelestia gets from a generated scheme, with our static
+    // accent.
+    function _container(tint) { return root._mix(System.surface2, tint, root.light ? 0.42 : 0.22); }
+    function _onContainer(tint) { return root._mix(System.textPrimary, tint, 0.30); }
+
     readonly property QtObject palette: QtObject {
         // Primary (accent)
         readonly property color m3primary:              System.accent
-        readonly property color m3onPrimary:            root._mix(System.accent, "#000000", 0.72)
-        readonly property color m3primaryContainer:     root._mix(System.surface, System.accent, 0.40)
-        readonly property color m3onPrimaryContainer:   root._mix(System.accent, System.textPrimary, 0.15)
+        readonly property color m3onPrimary:            root._mix(System.accent, "#000000", 0.78)
+        readonly property color m3primaryContainer:     root._container(System.accent)
+        readonly property color m3onPrimaryContainer:   root._onContainer(System.accent)
         readonly property color m3inversePrimary:       System.accentDim
         // Secondary (muted accent tonal — used for active nav item / containers)
         readonly property color m3secondary:            root._mix(System.accent, System.textPrimary, 0.10)
-        readonly property color m3onSecondary:          root._mix(System.accent, "#000000", 0.72)
-        readonly property color m3secondaryContainer:   root._mix(System.surface2, System.accent, 0.30)
-        readonly property color m3onSecondaryContainer: root.light ? root._mix(System.accent, "#000000", 0.55)
-                                                                    : root._mix(System.accent, "#ffffff", 0.25)
+        readonly property color m3onSecondary:          root._mix(System.accent, "#000000", 0.78)
+        readonly property color m3secondaryContainer:   root._container(System.accent)
+        readonly property color m3onSecondaryContainer: root._onContainer(System.accent)
         // Tertiary (reuse accent)
         readonly property color m3tertiary:             System.accent
-        readonly property color m3onTertiary:           root._mix(System.accent, "#000000", 0.72)
-        readonly property color m3tertiaryContainer:    root._mix(System.surface2, System.accent, 0.30)
-        readonly property color m3onTertiaryContainer:  root._mix(System.accent, System.textPrimary, 0.20)
+        readonly property color m3onTertiary:           root._mix(System.accent, "#000000", 0.78)
+        readonly property color m3tertiaryContainer:    root._container(System.accent)
+        readonly property color m3onTertiaryContainer:  root._onContainer(System.accent)
         // Surfaces — distinct elevation ladder
         readonly property color m3background:           System.background
         readonly property color m3onBackground:         System.textPrimary
@@ -70,6 +78,8 @@ QtObject {
         readonly property color m3outlineVariant:       System.border
         readonly property color m3error:                System.danger
         readonly property color m3onError:              "#ffffff"
+        readonly property color m3errorContainer:       root._container(System.danger)
+        readonly property color m3onErrorContainer:     root._onContainer(System.danger)
         readonly property color m3success:              System.success
         readonly property color m3shadow:               "#000000"
         readonly property color m3scrim:                "#000000"

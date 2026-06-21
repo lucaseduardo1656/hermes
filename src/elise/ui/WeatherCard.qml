@@ -1,70 +1,100 @@
 import QtQuick
 import Elise
 
-// Home-screen weather card (top-right). Bound to the Weather controller
-// (Open-Meteo). Temperature follows the metric/imperial setting. Hidden until
-// the first reading lands so it never shows an empty shell.
-Rectangle {
+// Compact home-screen weather chip (top-right). Just the glyph + temperature
+// at a glance; condition shows small underneath. Tapping expands a small popup
+// with the extra detail (feels-like / humidity / place) so the resting chip
+// stays minimal. Bound to the Weather controller (Open-Meteo).
+Item {
     id: root
 
     readonly property bool _imperial: Settings.appearance.units === "imperial"
-    function _temp(c) {
+    function _t(c) {
         const v = root._imperial ? (c * 9 / 5 + 32) : c
         return Math.round(v) + "°"
     }
 
-    width: 188
-    height: _content.implicitHeight + Theme.spaceL * 2
-    radius: Theme.radiusL
-    color: System.surface
-    border.color: System.border
-    border.width: 1
+    property bool expanded: false
+
+    implicitWidth:  _chip.width
+    implicitHeight: _chip.height
     visible: Weather.valid
     opacity: Weather.valid ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: Theme.durNormal } }
 
-    Row {
-        id: _content
-        anchors {
-            left: parent.left; right: parent.right
-            verticalCenter: parent.verticalCenter
-            leftMargin: Theme.spaceL; rightMargin: Theme.spaceL
-        }
-        spacing: Theme.spaceM
+    // ── Resting chip ────────────────────────────────────────────────────
+    Rectangle {
+        id: _chip
+        width: _row.implicitWidth + Theme.spaceM * 2
+        height: 44
+        radius: Tokens.rounding.full
+        color: Colours.palette.m3surfaceContainer
+        border.color: Colours.palette.m3outlineVariant
+        border.width: 1
 
-        MaterialIcon {
-            anchors.verticalCenter: parent.verticalCenter
-            symbol: Weather.icon
-            color: System.accent
-            fontStyle: Tokens.font.icon.size(34)
-            fill: 1
-        }
+        Row {
+            id: _row
+            anchors.centerIn: parent
+            spacing: Theme.spaceS
 
-        Column {
-            anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - parent.spacing - 40
-            spacing: 1
-
-            Text {
-                text: root._temp(Weather.temperature)
-                color: System.textPrimary
-                font.pixelSize: Theme.fontDisplay + 6
+            MaterialIcon {
+                anchors.verticalCenter: parent.verticalCenter
+                symbol: Weather.icon
+                color: Colours.palette.m3primary
+                fontStyle: Tokens.font.icon.medium
+                fill: 1
+            }
+            StyledText {
+                anchors.verticalCenter: parent.verticalCenter
+                text: root._t(Weather.temperature)
+                color: Colours.palette.m3onSurface
+                font.pixelSize: Theme.fontLarge
                 font.weight: Font.Bold
             }
-            Text {
+        }
+
+        MouseArea { anchors.fill: parent; onClicked: root.expanded = !root.expanded }
+    }
+
+    // ── Expanded detail popover (standard floating-card pattern) ────────
+    Popover {
+        open: root.expanded
+        originCorner: Item.TopRight
+        anchors { top: _chip.bottom; topMargin: Theme.spaceS; right: _chip.right }
+
+        Column {
+            width: 188
+            spacing: Theme.spaceXS
+
+            StyledText {
                 width: parent.width
                 text: Weather.condition
-                color: System.textSecondary
-                font.pixelSize: Theme.fontSmall
-                elide: Text.ElideRight
+                color: Colours.palette.m3onSurface
+                font: Tokens.font.body.medium
+                wrapMode: Text.WordWrap
             }
-            Text {
+            StyledText {
                 width: parent.width
                 visible: Weather.place !== ""
                 text: Weather.place
-                color: System.textMuted
-                font.pixelSize: Theme.fontCaption
-                elide: Text.ElideRight
+                color: Colours.palette.m3onSurfaceVariant
+                font: Tokens.font.label.small
+                wrapMode: Text.WordWrap
+            }
+            Row {
+                width: parent.width
+                spacing: Theme.spaceL
+                topPadding: Theme.spaceXS
+                StyledText {
+                    text: "Sensação " + root._t(Weather.feelsLike)
+                    color: Colours.palette.m3onSurfaceVariant
+                    font: Tokens.font.label.small
+                }
+                StyledText {
+                    text: "Umidade " + Weather.humidity + "%"
+                    color: Colours.palette.m3onSurfaceVariant
+                    font: Tokens.font.label.small
+                }
             }
         }
     }

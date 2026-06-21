@@ -1,20 +1,17 @@
 import QtQuick
 import Elise
 
-// Floating Action Button — a circular tappable button used for primary
-// secondary actions (e.g. opening Settings).
+// Floating circular button for map actions. M3 tonal style by default
+// (surface-container circle, like the CompassRose) so the whole right-edge
+// stack reads as one set; set `primary: true` for the accent-filled variant.
 //
 // Usage:
-//   Fab {
-//       icon: "qrc:/icons/settings.svg"
-//       onClicked: ...
-//   }
+//   Fab { symbol: "settings"; onClicked: ... }
 Item {
     id: root
 
-    property url   icon
-    property color color: System.accent
-    property color iconColor: "#000000"
+    property string symbol
+    property bool   primary: false
     signal clicked()
 
     readonly property int size: Theme.btnMedium
@@ -26,19 +23,19 @@ Item {
         id: bg
         anchors.fill: parent
         radius: width / 2
-        color:  _area.pressed ? System.accentDim : root.color
+        color: root.primary
+                 ? (_area.pressed ? Colours.palette.m3inversePrimary : Colours.palette.m3primary)
+                 : (_area.pressed ? Colours.palette.m3surfaceContainerHigh : Colours.palette.m3surfaceContainer)
+        border.color: root.primary ? "transparent" : Colours.palette.m3outlineVariant
+        border.width: 1
         Behavior on color { ColorAnimation { duration: Theme.durFast } }
-
-        // Soft shadow ring (subtle elevation)
-        border.color: Qt.rgba(0, 0, 0, 0.25)
-        border.width: Theme.borderHairline
     }
 
-    SvgIcon {
+    MaterialIcon {
         anchors.centerIn: parent
-        source: root.icon
-        color:  root.iconColor
-        size:   Theme.iconS
+        symbol: root.symbol
+        color:  root.primary ? Colours.palette.m3onPrimary : Colours.palette.m3onSurfaceVariant
+        fontStyle: Tokens.font.icon.medium
     }
 
     MouseArea {

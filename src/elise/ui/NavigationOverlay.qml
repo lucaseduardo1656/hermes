@@ -21,14 +21,14 @@ Item {
         anchors.fill: parent
         height: Math.max(Theme.navCardH, _row.implicitHeight + Theme.spaceL)
         radius: Theme.radiusL
-        color:  System.surface
+        color:  Colours.palette.m3surfaceContainer
 
         // 1px hairline border on top of the card surface
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
             color: "transparent"
-            border.color: System.border
+            border.color: Colours.palette.m3outlineVariant
             border.width: 1
         }
 
@@ -46,14 +46,14 @@ Item {
                 width:  Theme.navBadge
                 height: Theme.navBadge
                 radius: Theme.radiusM
-                color:  Qt.rgba(System.accent.r, System.accent.g, System.accent.b, 0.15)
-                SvgIcon {
+                color:  Qt.alpha(Colours.palette.m3primary, 0.15)
+                MaterialIcon {
                     anchors.centerIn: parent
-                    source: root.direction === "left"  ? "qrc:/icons/arrow-left.svg"
-                          : root.direction === "right" ? "qrc:/icons/arrow-right.svg"
-                          :                              "qrc:/icons/arrow-straight.svg"
-                    color: System.accent
-                    size:  Theme.iconM
+                    symbol: root.direction === "left"  ? "turn_left"
+                          : root.direction === "right" ? "turn_right"
+                          :                              "straight"
+                    color: Colours.palette.m3primary
+                    fontStyle: Tokens.font.icon.medium
                 }
             }
 
@@ -62,9 +62,9 @@ Item {
                 width: parent.width - Theme.navBadge - Theme.spaceM
                 spacing: 3
 
-                Text {
+                StyledText {
                     text:  root.instruction
-                    color: System.textPrimary
+                    color: Colours.palette.m3onSurface
                     font.pixelSize: Theme.fontBody
                     font.weight:    Font.Medium
                     width: parent.width
@@ -72,9 +72,9 @@ Item {
                     maximumLineCount: 3
                     elide: Text.ElideRight
                 }
-                Text {
+                StyledText {
                     text:  root.distance
-                    color: System.accent
+                    color: Colours.palette.m3primary
                     font.pixelSize: Theme.fontSmall
                     font.weight:    Font.Medium
                 }
