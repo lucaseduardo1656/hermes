@@ -53,6 +53,103 @@ Item {
         onTriggered: _map.center = root._smoothCoord
     }
 
+    // ── Focus a selected POI into the uncovered (right) part of the map ────────
+    // The POI card covers the left edge, so when a place is picked we slide the
+    // map so the place sits centred in the visible area to the right of the card.
+    property var  _focusFrom: null
+    property var  _focusTo:   null
+    property real _focusFromZoom: 0
+    property real _focusToZoom:   0
+    property real _focusT:    1
+    NumberAnimation {
+        id: _focusAnim
+        target: root; property: "_focusT"
+        from: 0; to: 1; duration: 450
+        // Decelerate into the target — responsive start, gentle settle. Avoids
+        // the "slow-start then jerk" InOutCubic gives on short hops.
+        easing.type: Easing.OutCubic
+    }
+    on_FocusTChanged: {
+        if (!_focusFrom || !_focusTo) return
+        _map.center = QtPositioning.coordinate(
+            _focusFrom.latitude  + (_focusTo.latitude  - _focusFrom.latitude)  * _focusT,
+            _focusFrom.longitude + (_focusTo.longitude - _focusFrom.longitude) * _focusT)
+        if (_focusToZoom > 0)
+            _map.zoomLevel = _focusFromZoom + (_focusToZoom - _focusFromZoom) * _focusT
+    }
+
+    // Animated fly to a coordinate (centred), with an optional target zoom.
+    // Used when a searched place is picked so the map glides there instead of
+    // teleporting.
+    function _flyTo(lat, lon, zoom) {
+        if (!_map) return
+        _following = false
+        const target = QtPositioning.coordinate(lat, lon)
+        const from = _map.center
+        const dLat = target.latitude - from.latitude
+        const dLon = target.longitude - from.longitude
+        _focusFrom = from
+        _focusTo = target
+        _focusFromZoom = _map.zoomLevel
+        _focusToZoom = zoom > 0 ? zoom : 0
+        // Duration scales with how far we travel (degrees → ~feel).
+        const deg = Math.sqrt(dLat * dLat + dLon * dLon)
+        _focusAnim.duration = Math.max(260, Math.min(900, 260 + deg * 9000))
+        _focusAnim.restart()
+    }
+    function _focusPoi(lat, lon) {
+        if (!_map) return
+        _following = false
+        const coord = QtPositioning.coordinate(lat, lon)
+
+        const orig = _map.center
+        const w = _map.width, h = _map.height
+
+        // Target screen point for the POI: centred in the area to the right of
+        // the card, and vertically in the part not hidden by the player bar.
+        const cover = Theme.spaceL * 2 + 380
+        const wantX = cover + (w - cover) / 2
+        const wantY = (h - root.bottomOffset) / 2
+
+        // Measure the screen→coord transform at the CURRENT centre — toCoordinate
+        // reads the live centre correctly, whereas setting centre then reading it
+        // back is async on this plugin (it returned the OLD centre, which made
+        // every focus drift a fixed ~half-card to the right). Use the per-pixel
+        // coord vectors for +x and +y; built from the map's own projection they
+        // already include the current rotation (bearing).
+        const c0 = _map.toCoordinate(Qt.point(w / 2, h / 2), false)
+        const cx = _map.toCoordinate(Qt.point(w,     h / 2), false)   // +w/2 px right
+        const cy = _map.toCoordinate(Qt.point(w / 2, h),     false)   // +h/2 px down
+        if (!c0.isValid || !cx.isValid || !cy.isValid) return
+        const exLat = (cx.latitude  - c0.latitude)  / (w / 2)
+        const exLon = (cx.longitude - c0.longitude) / (w / 2)
+        const eyLat = (cy.latitude  - c0.latitude)  / (h / 2)
+        const eyLon = (cy.longitude - c0.longitude) / (h / 2)
+
+        // Centre = POI minus the coord-delta for the desired POI screen offset.
+        const ox = wantX - w / 2
+        const oy = wantY - h / 2
+        const dLat = ox * exLat + oy * eyLat
+        const dLon = ox * exLon + oy * eyLon
+        const target = QtPositioning.coordinate(lat - dLat, lon - dLon)
+
+        const tLat = target.latitude  - orig.latitude
+        const tLon = target.longitude - orig.longitude
+        const deg  = Math.sqrt(tLat * tLat + tLon * tLon)
+        // Below a negligible move, don't animate at all (e.g. re-tapping the
+        // same already-centred point).
+        if (deg < 1e-6) return
+        _focusAnim.duration = Math.max(140, Math.min(600, deg * 9000))
+
+        _focusFrom = orig
+        _focusTo = target
+        _focusFromZoom = 0
+        _focusToZoom = 0
+        _focusAnim.restart()
+    }
+    on_SelectedPoiChanged: if (_selectedPoi && _selectedPoi.lat !== undefined)
+                               _focusPoi(_selectedPoi.lat, _selectedPoi.lon)
+
     // ── POI viewport feed ─────────────────────────────────────────────────────
     // Debounced: on every pan/zoom we hand the visible bbox + zoom to RoadInfo,
     // which re-clusters the POIs for that region (so panning to a far city shows
@@ -693,10 +790,30 @@ Item {
             if (c.longitude < minLon) minLon = c.longitude
             if (c.longitude > maxLon) maxLon = c.longitude
         }
-        const rect = QtPositioning.rectangle(
-            QtPositioning.coordinate(maxLat, minLon),
-            QtPositioning.coordinate(minLat, maxLon))
-        _map.fitViewportToGeoShape(rect, 80)
+        // Glide to the framed route instead of teleporting. Centre is the bbox
+        // midpoint (zoom-independent); the fitting zoom is derived from the bbox
+        // span vs the viewport using the map's own per-pixel scale, then both are
+        // animated together. Reading the fit back from fitViewportToGeoShape is
+        // async on this plugin, so we compute it ourselves.
+        const cLat = (minLat + maxLat) / 2
+        const cLon = (minLon + maxLon) / 2
+        const w = _map.width, h = _map.height
+        const c0 = _map.toCoordinate(Qt.point(w / 2, h / 2), false)
+        const cx = _map.toCoordinate(Qt.point(w,     h / 2), false)
+        const cy = _map.toCoordinate(Qt.point(w / 2, 0),     false)
+        const pad = 80
+        let target = QtPositioning.coordinate(cLat, cLon)
+        let targetZoom = _map.zoomLevel
+        if (c0.isValid && cx.isValid && cy.isValid) {
+            const lonPerPx = Math.abs(cx.longitude - c0.longitude) / (w / 2)
+            const latPerPx = Math.abs(cy.latitude  - c0.latitude)  / (h / 2)
+            const needLon = Math.max(1e-9, (maxLon - minLon)) / Math.max(1, w - 2 * pad)
+            const needLat = Math.max(1e-9, (maxLat - minLat)) / Math.max(1, h - 2 * pad)
+            const zLon = _map.zoomLevel - Math.log(needLon / lonPerPx) / Math.LN2
+            const zLat = _map.zoomLevel - Math.log(needLat / latPerPx) / Math.LN2
+            targetZoom = Math.max(3, Math.min(18, Math.min(zLon, zLat)))
+        }
+        _flyTo(cLat, cLon, targetZoom)
     }
 
     // ── Turn-by-turn maneuver tracking ───────────────────────────────────────
@@ -1296,6 +1413,7 @@ Item {
         radius: Theme.radiusL
         color: Colours.palette.m3surfaceContainerHigh
         border.color: Colours.palette.m3outlineVariant; border.width: 1
+        clip: true   // round the full-bleed hero to the card's top corners
 
         // Slide in/out from the left edge + fade (Tesla-style), emphasized motion.
         opacity: _open ? 1 : 0
@@ -1310,6 +1428,9 @@ Item {
         readonly property bool hasPhone: !!poi.phone   && ("" + poi.phone).length > 0
         readonly property bool hasWeb:   !!poi.website && ("" + poi.website).length > 0
         readonly property bool hasAddr:  !!poi.address && ("" + poi.address).length > 0
+        // Place photos (future data): an array, or a single `photo`, or none.
+        readonly property var photos: (poi.photos && poi.photos.length) ? poi.photos
+                                     : (poi.photo ? [poi.photo] : [])
         property bool fav: false
         onPoiChanged: fav = root._selectedPoi
                         ? RoadInfo.isFavorite(poi.lat, poi.lon) : false
@@ -1317,220 +1438,255 @@ Item {
         transform: Translate { x: _poiCard._open ? 0 : -(_poiCard.width + Theme.spaceL * 2)
             Behavior on x { Anim { easing: Tokens.anim.emphasizedDecel } } }
 
-        Flickable {
+        VerticalFadeFlickable {
+            id: _poiFlick
             anchors.fill: parent
-            anchors.margins: Theme.spaceL
-            contentHeight: _poiCol.height
+            contentWidth: width
+            contentHeight: _poiCol.implicitHeight
             clip: true
-            boundsBehavior: Flickable.StopAtBounds
 
             Column {
                 id: _poiCol
                 width: parent.width
                 spacing: Theme.spaceL
 
-                // Hero — the place photo when available, otherwise a category-
-                // coloured banner with the category glyph. Hook for the richer
-                // place data (photos) coming later.
-                Rectangle {
+                // ── Hero — full-bleed photo carousel at the very top (no gap).
+                //    Swipe sideways through multiple photos; falls back to a
+                //    category-coloured banner when there are none. The top two
+                //    corners are rounded to the card via a MultiEffect mask
+                //    (Qt's rectangular clip can't follow a radius). ─────────────
+                Item {
                     width: parent.width
-                    height: 150
-                    radius: Theme.radiusM
-                    clip: true
-                    color: _poiCard.catColor
+                    height: 168
+                    layer.enabled: true
+                    layer.effect: Mask { maskSource: _heroMask }
 
-                    Image {
-                        id: _heroImg
-                        anchors.fill: parent
-                        source: _poiCard.poi.photo || ""
-                        fillMode: Image.PreserveAspectCrop
-                        visible: (_poiCard.poi.photo || "") !== "" && status === Image.Ready
-                        asynchronous: true
-                    }
-                    // Loading shimmer while a photo decodes.
                     Rectangle {
+                        id: _heroMask
                         anchors.fill: parent
-                        visible: _heroImg.status === Image.Loading
-                        color: Colours.palette.m3surfaceContainerHighest
-                        SequentialAnimation on opacity {
-                            running: _heroImg.status === Image.Loading
-                            loops: Animation.Infinite
-                            NumberAnimation { from: 0.4; to: 1; duration: 700 }
-                            NumberAnimation { from: 1; to: 0.4; duration: 700 }
-                        }
+                        visible: false
+                        layer.enabled: true
+                        topLeftRadius: Theme.radiusL
+                        topRightRadius: Theme.radiusL
+                        bottomLeftRadius: 0
+                        bottomRightRadius: 0
                     }
-                    SvgIcon {
-                        anchors.centerIn: parent
-                        source: root._poiIcon(_poiCard.poi.category)
-                        color: "#ffffff"; size: 52
-                        visible: (_poiCard.poi.photo || "") === ""
-                        opacity: 0.9
-                    }
-                }
 
-                // Rating row — shown when the place carries a rating (future
-                // data); a row of stars + the numeric score + review count.
-                Row {
-                    spacing: Theme.spaceS
-                    visible: (_poiCard.poi.rating || 0) > 0
-                    Row {
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 1
-                        Repeater {
-                            model: 5
-                            MaterialIcon {
-                                required property int index
-                                symbol: index < Math.round(_poiCard.poi.rating || 0) ? "star" : "star_outline"
-                                color: Colours.palette.m3primary
-                                fontStyle: Tokens.font.icon.small
-                                fill: 1
+                    ListView {
+                        id: _heroList
+                        anchors.fill: parent
+                        orientation: ListView.Horizontal
+                        snapMode: ListView.SnapOneItem
+                        highlightRangeMode: ListView.StrictlyEnforceRange
+                        boundsBehavior: Flickable.StopAtBounds
+                        clip: true
+                        interactive: _poiCard.photos.length > 1
+                        model: Math.max(1, _poiCard.photos.length)
+
+                        delegate: Item {
+                            required property int index
+                            width: _heroList.width
+                            height: _heroList.height
+
+                            // Category banner when no photo.
+                            Rectangle {
+                                anchors.fill: parent
+                                visible: _poiCard.photos.length === 0
+                                color: _poiCard.catColor
+                                SvgIcon {
+                                    anchors.centerIn: parent
+                                    source: root._poiIcon(_poiCard.poi.category)
+                                    color: "#ffffff"; size: 56; opacity: 0.9
+                                }
+                            }
+                            Image {
+                                id: _heroImg
+                                anchors.fill: parent
+                                visible: _poiCard.photos.length > 0
+                                source: _poiCard.photos.length > 0 ? _poiCard.photos[index] : ""
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                            }
+                            Rectangle {   // loading shimmer
+                                anchors.fill: parent
+                                visible: _heroImg.status === Image.Loading
+                                color: Colours.palette.m3surfaceContainerHighest
+                                SequentialAnimation on opacity {
+                                    running: _heroImg.status === Image.Loading
+                                    loops: Animation.Infinite
+                                    NumberAnimation { from: 0.4; to: 1; duration: 700 }
+                                    NumberAnimation { from: 1; to: 0.4; duration: 700 }
+                                }
                             }
                         }
                     }
-                    StyledText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: ("" + (_poiCard.poi.rating || 0))
-                              + (_poiCard.poi.reviews ? "  ·  " + _poiCard.poi.reviews + " avaliações" : "")
-                        color: Colours.palette.m3onSurfaceVariant
-                        font: Tokens.font.body.small
+
+                    // Page dots for multiple photos.
+                    Row {
+                        visible: _poiCard.photos.length > 1
+                        anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter
+                                  bottomMargin: Theme.spaceS }
+                        spacing: 5
+                        Repeater {
+                            model: _poiCard.photos.length
+                            Rectangle {
+                                required property int index
+                                width: 6; height: 6; radius: 3
+                                color: index === _heroList.currentIndex
+                                       ? "#ffffff" : Qt.rgba(1, 1, 1, 0.5)
+                            }
+                        }
                     }
                 }
 
-                // Header: name + close. Name elides to two lines (Tesla-style);
-                // anchored to the top so a long title never overflows upward and
-                // hides behind the panel edge.
-                Item {
-                    width: parent.width
-                    height: Math.max(_poiName.implicitHeight, _panelClose.height)
+                // Body — inset with the standard side margin.
+                Column {
+                    width: parent.width - Theme.spaceL * 2
+                    x: Theme.spaceL
+                    spacing: Theme.spaceL
+
+                    // Rating row (future data).
+                    Row {
+                        spacing: Theme.spaceS
+                        visible: (_poiCard.poi.rating || 0) > 0
+                        Row {
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 1
+                            Repeater {
+                                model: 5
+                                MaterialIcon {
+                                    required property int index
+                                    symbol: index < Math.round(_poiCard.poi.rating || 0) ? "star" : "star_outline"
+                                    color: Colours.palette.m3primary
+                                    fontStyle: Tokens.font.icon.small
+                                    fill: 1
+                                }
+                            }
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: ("" + (_poiCard.poi.rating || 0))
+                                  + (_poiCard.poi.reviews ? "  ·  " + _poiCard.poi.reviews + " avaliações" : "")
+                            color: Colours.palette.m3onSurfaceVariant
+                            font: Tokens.font.body.small
+                        }
+                    }
+
+                    // Name (elides to two lines).
                     StyledText {
-                        id: _poiName
-                        anchors { left: parent.left; right: _panelClose.left
-                                  rightMargin: Theme.spaceS; top: parent.top }
+                        width: parent.width
                         text: _poiCard.poi.name && _poiCard.poi.name.length
                                 ? _poiCard.poi.name : root._poiCatLabel(_poiCard.poi.category)
                         color: Colours.palette.m3onSurface
                         font: Tokens.font.title.large
                         wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight
                     }
-                    IconButton {
-                        id: _panelClose
-                        anchors { right: parent.right; top: parent.top }
-                        isRound: true
-                        type: IconButton.Text
-                        icon: "close"
-                        onClicked: root._selectedPoi = null
-                    }
-                }
 
-                // Category + distance sub-line
-                Row {
-                    spacing: Theme.spaceS
-                    SvgIcon {
-                        anchors.verticalCenter: parent.verticalCenter
-                        size: 16; color: _poiCard.catColor
-                        source: root._poiIcon(_poiCard.poi.category)
-                    }
-                    StyledText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root._poiLabel(_poiCard.poi)
-                              + (_poiCard.distStr ? "   ·   " + _poiCard.distStr : "")
-                        color: Colours.palette.m3onSurfaceVariant
-                        font: Tokens.font.body.small
-                    }
-                }
-
-                // ── Actions — a prominent "Navegar" + round quick actions, all
-                //    real ButtonBase components (ripple + radius morph). ────────
-                RowLayout {
-                    width: parent.width
-                    spacing: Theme.spaceS
-
-                    // All action buttons share one height; the round quick
-                    // actions are square at that height so they line up with the
-                    // prominent "Navegar".
-                    readonly property int _btnH: 52
-
-                    IconTextButton {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: parent._btnH
-                        type: IconTextButton.Filled
-                        icon: "navigation"
-                        text: "Navegar"
-                        iconLabel.fill: 1
-                        onClicked: {
-                            root.setDestination(
-                                QtPositioning.coordinate(_poiCard.poi.lat, _poiCard.poi.lon),
-                                _poiCard.poi.name || root._poiCatLabel(_poiCard.poi.category))
-                            root._selectedPoi = null
+                    // Category + distance sub-line.
+                    Row {
+                        spacing: Theme.spaceS
+                        SvgIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            size: 16; color: _poiCard.catColor
+                            source: root._poiIcon(_poiCard.poi.category)
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root._poiLabel(_poiCard.poi)
+                                  + (_poiCard.distStr ? "   ·   " + _poiCard.distStr : "")
+                            color: Colours.palette.m3onSurfaceVariant
+                            font: Tokens.font.body.small
                         }
                     }
-                    IconButton {
-                        Layout.preferredWidth: parent._btnH; Layout.preferredHeight: parent._btnH
-                        isRound: true
-                        type: IconButton.Tonal
-                        icon: "call"
-                        disabled: !_poiCard.hasPhone
-                    }
-                    IconButton {
-                        Layout.preferredWidth: parent._btnH; Layout.preferredHeight: parent._btnH
-                        isRound: true
-                        type: IconButton.Tonal
-                        icon: "language"
-                        disabled: !_poiCard.hasWeb
-                    }
-                    IconButton {
-                        Layout.preferredWidth: parent._btnH; Layout.preferredHeight: parent._btnH
-                        isRound: true
-                        isToggle: true
-                        type: IconButton.Tonal
-                        icon: "star"
-                        checked: _poiCard.fav
-                        onClicked: {
-                            RoadInfo.toggleFavorite(_poiCard.poi.lat, _poiCard.poi.lon,
-                                _poiCard.poi.name || root._poiCatLabel(_poiCard.poi.category))
-                            _poiCard.fav = !_poiCard.fav
+
+                    // Actions — prominent "Navegar" + round quick actions.
+                    RowLayout {
+                        width: parent.width
+                        spacing: Theme.spaceS
+                        readonly property int _btnH: 52
+
+                        IconTextButton {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: parent._btnH
+                            type: IconTextButton.Filled
+                            icon: "navigation"
+                            text: "Navegar"
+                            iconLabel.fill: 1
+                            onClicked: {
+                                root.setDestination(
+                                    QtPositioning.coordinate(_poiCard.poi.lat, _poiCard.poi.lon),
+                                    _poiCard.poi.name || root._poiCatLabel(_poiCard.poi.category))
+                                root._selectedPoi = null
+                            }
+                        }
+                        IconButton {
+                            Layout.preferredWidth: parent._btnH; Layout.preferredHeight: parent._btnH
+                            isRound: true; type: IconButton.Tonal; icon: "call"
+                            disabled: !_poiCard.hasPhone
+                        }
+                        IconButton {
+                            Layout.preferredWidth: parent._btnH; Layout.preferredHeight: parent._btnH
+                            isRound: true; type: IconButton.Tonal; icon: "language"
+                            disabled: !_poiCard.hasWeb
+                        }
+                        IconButton {
+                            Layout.preferredWidth: parent._btnH; Layout.preferredHeight: parent._btnH
+                            isRound: true; isToggle: true; type: IconButton.Tonal; icon: "star"
+                            checked: _poiCard.fav
+                            onClicked: {
+                                RoadInfo.toggleFavorite(_poiCard.poi.lat, _poiCard.poi.lon,
+                                    _poiCard.poi.name || root._poiCatLabel(_poiCard.poi.category))
+                                _poiCard.fav = !_poiCard.fav
+                            }
                         }
                     }
-                }
 
-                // Divider
-                Rectangle { width: parent.width; height: 1; color: Colours.palette.m3outlineVariant
-                            visible: _poiCard.hasAddr || _poiCard.hasPhone }
+                    // Info — address / phone as About-style InfoRows (label +
+                    // value, grouped, at the standard row height). Any further
+                    // place info that lands here uses the same row.
+                    ColumnLayout {
+                        width: parent.width
+                        spacing: Tokens.spacing.extraSmall
+                        visible: _poiCard.hasAddr || _poiCard.hasPhone
 
-                // Address
-                Row {
-                    width: parent.width
-                    visible: _poiCard.hasAddr
-                    spacing: Theme.spaceM
-                    MaterialIcon {
-                        symbol: "location_on"; fontStyle: Tokens.font.icon.small
-                        color: Colours.palette.m3onSurfaceVariant
+                        InfoRow {
+                            Layout.fillWidth: true
+                            visible: _poiCard.hasAddr
+                            first: true
+                            last: !_poiCard.hasPhone
+                            label: "Endereço"
+                            value: "" + (_poiCard.poi.address || "")
+                        }
+                        InfoRow {
+                            Layout.fillWidth: true
+                            visible: _poiCard.hasPhone
+                            first: !_poiCard.hasAddr
+                            last: true
+                            label: "Telefone"
+                            value: "" + (_poiCard.poi.phone || "")
+                        }
                     }
-                    StyledText {
-                        width: parent.width - Theme.iconS - Theme.spaceM
-                        text: "" + (_poiCard.poi.address || "")
-                        color: Colours.palette.m3onSurface
-                        font: Tokens.font.body.small
-                        wrapMode: Text.WordWrap; elide: Text.ElideRight; maximumLineCount: 3
-                    }
-                }
 
-                // Phone
-                Row {
-                    width: parent.width
-                    visible: _poiCard.hasPhone
-                    spacing: Theme.spaceM
-                    MaterialIcon {
-                        symbol: "call"; fontStyle: Tokens.font.icon.small
-                        color: Colours.palette.m3onSurfaceVariant
-                    }
-                    StyledText {
-                        text: "" + (_poiCard.poi.phone || "")
-                        color: Colours.palette.m3onSurface
-                        font: Tokens.font.body.small
-                    }
+                    // Bottom breathing room.
+                    Item { width: 1; height: Theme.spaceL }
                 }
             }
+        }
+
+        // Close button — floats over the hero, top-right, with a translucent
+        // scrim so the white glyph stays visible over a light OR dark photo.
+        Rectangle {
+            anchors { right: parent.right; top: parent.top; margins: Theme.spaceM }
+            width: Theme.btnMedium; height: Theme.btnMedium; radius: width / 2
+            color: Qt.rgba(0, 0, 0, _closeArea.pressed ? 0.6 : 0.42)
+            z: 5
+            MaterialIcon {
+                anchors.centerIn: parent
+                symbol: "close"; color: "#ffffff"
+                fontStyle: Tokens.font.icon.medium
+            }
+            MouseArea { id: _closeArea; anchors.fill: parent
+                        onClicked: root._selectedPoi = null }
         }
     }
 

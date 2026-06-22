@@ -326,6 +326,57 @@ Window {
 
     }
 
+    // System event toasts — Wi-Fi / Bluetooth connect-disconnect and GPS signal
+    // loss feed the notification stack. Previous values are seeded on load so a
+    // state that's already true at boot doesn't fire a spurious toast.
+    Item {
+        id: _sysToasts
+        property string _prevSsid: ""
+        property string _prevBt:   ""
+        property bool   _prevGps:  false
+        property bool   _ready:    false
+        Component.onCompleted: {
+            _prevSsid = Settings.network.currentSsid
+            _prevBt   = Settings.bluetooth.connectedAlias
+            _prevGps  = GPS.valid
+            _ready    = true
+        }
+
+        Connections {
+            target: Settings.network
+            function onChanged() {
+                if (!_sysToasts._ready) return
+                const s = Settings.network.currentSsid
+                if (s === _sysToasts._prevSsid) return
+                if (s !== "") Notifs.notify("Wi-Fi conectado", "Conectado a " + s, 0)
+                else          Notifs.notify("Wi-Fi desconectado", "", 1)
+                _sysToasts._prevSsid = s
+            }
+        }
+        Connections {
+            target: Settings.bluetooth
+            function onChanged() {
+                if (!_sysToasts._ready) return
+                const a = Settings.bluetooth.connectedAlias
+                if (a === _sysToasts._prevBt) return
+                if (a !== "")                       Notifs.notify("Bluetooth conectado", a, 0)
+                else if (_sysToasts._prevBt !== "") Notifs.notify("Bluetooth desconectado", _sysToasts._prevBt, 0)
+                _sysToasts._prevBt = a
+            }
+        }
+        Connections {
+            target: GPS
+            function onPositionChanged() {
+                if (!_sysToasts._ready) return
+                const v = GPS.valid
+                if (v === _sysToasts._prevGps) return
+                if (!v) Notifs.notify("Sinal de GPS perdido", "Sem posição no momento", 1)
+                else    Notifs.notify("GPS reconectado", "", 0)
+                _sysToasts._prevGps = v
+            }
+        }
+    }
+
     // ── Settings menu ────────────────────────────────────────────────────────
     SettingsMenu {
         id: _settings

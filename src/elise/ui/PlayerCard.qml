@@ -122,8 +122,24 @@ Item {
     Item {
         id: _collapsedView
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+
+        // Swipe-to-dismiss: drag the bar sideways past a threshold to clear the
+        // track (like dismissing a notification). Snaps back otherwise.
+        transform: Translate { id: _dismissT; x: 0 }
+        NumberAnimation { id: _dismissAnim
+            target: _dismissT; property: "x"
+            to: _dismissT.x >= 0 ? _collapsedView.width : -_collapsedView.width
+            duration: Theme.durNormal; easing.type: Easing.OutCubic
+            onFinished: { Player.clear(); _dismissT.x = 0 }
+        }
+        NumberAnimation { id: _snapBack
+            target: _dismissT; property: "x"; to: 0
+            duration: Theme.durFast; easing.type: Easing.OutCubic
+        }
         height: root.collapsedH
-        opacity: root.playerState === "collapsed" ? 1.0 : 0.0
+        // Fade with both the state transition and the dismiss swipe.
+        opacity: (root.playerState === "collapsed" ? 1.0 : 0.0)
+               * (1 - Math.min(1, Math.abs(_dismissT.x) / (width * 0.6)))
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: Theme.durFast } }
 
@@ -134,9 +150,24 @@ Item {
         MouseArea {
             anchors.fill: parent
             property real _pressY: 0
-            onPressed:          (m) => { _pressY = m.y }
-            onPositionChanged:  (m) => { if (pressed && _pressY - m.y > 8) root.stateChangeRequested("half") }
-            onClicked:          root.stateChangeRequested("half")
+            property real _pressX: 0
+            property bool _swiping: false
+            onPressed: (m) => { _pressY = m.y; _pressX = m.x; _swiping = false }
+            onPositionChanged: (m) => {
+                if (!pressed) return
+                const dx = m.x - _pressX
+                const dy = _pressY - m.y
+                if (!_swiping && Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy))
+                    _swiping = true
+                if (_swiping)      _dismissT.x = dx
+                else if (dy > 8)   root.stateChangeRequested("half")
+            }
+            onReleased: {
+                if (!_swiping) return
+                if (Math.abs(_dismissT.x) > width * 0.35) _dismissAnim.start()
+                else _snapBack.start()
+            }
+            onClicked: if (!_swiping) root.stateChangeRequested("half")
         }
 
         Row {
@@ -612,17 +643,25 @@ Item {
                 visible: _expandedView.fullExpanded
                 clip:    true
 
-                // ── Search results overlay ──
-                TrackList {
-                    id: _searchList
-                    width: parent.width
+                // ── Search results overlay — scrollable with the edge fade,
+                //    matching the settings lists. ──
+                VerticalFadeFlickable {
+                    anchors.fill: parent
                     visible: _expandedView.searchResults.length > 0
-                    heading: "RESULTADOS"
-                    tracks: _expandedView.searchResults
-                    onTrackTapped: (idx) => {
-                        Player.playQueue(_expandedView.searchResults, idx)
-                        _expandedView.searchResults = []
-                        _expandedView.lastQuery     = ""
+                    contentWidth: width
+                    contentHeight: _searchList.implicitHeight
+                    clip: true
+
+                    TrackList {
+                        id: _searchList
+                        width: parent.width
+                        heading: "RESULTADOS"
+                        tracks: _expandedView.searchResults
+                        onTrackTapped: (idx) => {
+                            Player.playQueue(_expandedView.searchResults, idx)
+                            _expandedView.searchResults = []
+                            _expandedView.lastQuery     = ""
+                        }
                     }
                 }
 
